@@ -1,0 +1,228 @@
+name: nwl-reel-e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: "Task ID (vd REEL_20261113_V01)"
+        required: true
+      video_code:
+        description: "Mã video trong bộ 24 mẫu (V01..V24)"
+        required: false
+        default: "V01"
+      voice:
+        description: "vi_male_nhat_phong | vi_female_mai | en_male_adam | en_female_claire"
+        required: false
+        default: "vi_male_nhat_phong"
+      script_file_id:
+        description: "Tuỳ chọn: Drive file ID của kịch bản .txt (để trống = tự lấy 8 câu của video_code)"
+        required: false
+        default: ""
+      num_step:
+        description: "Số bước diffusion OmniVoice (16 nhanh, 32 chuẩn)"
+        required: false
+        default: "32"
+      fps:
+        description: "FPS video"
+        required: false
+        default: "30"
+      upload_to_drive:
+        description: "Đẩy kết quả hoàn chỉnh lên RESULTS qua ResultsUploader"
+        type: boolean
+        default: true
+  repository_dispatch:
+    types: [nwl-reel-e2e]
+
+concurrency:
+  group: reel-e2e-${{ github.event.inputs.task_id || github.event.client_payload.task_id }}
+  cancel-in-progress: false
+
+env:
+  TASK_ID: ${{ github.event.inputs.task_id || github.event.client_payload.task_id }}
+  VIDEO_CODE: ${{ github.event.inputs.video_code || github.event.client_payload.video_code || 'V01' }}
+  VOICE: ${{ github.event.inputs.voice || github.event.client_payload.voice || 'vi_male_nhat_phong' }}
+  SCRIPT_FILE_ID: ${{ github.event.inputs.script_file_id || github.event.client_payload.script_file_id || '' }}
+  NUM_STEP: ${{ github.event.inputs.num_step || github.event.client_payload.num_step || '32' }}
+  FPS: ${{ github.event.inputs.fps || github.event.client_payload.fps || '30' }}
+  UPLOAD: ${{ github.event.inputs.upload_to_drive || github.event.client_payload.upload_to_drive || 'true' }}
+  TARGET_LUFS: "-14"
+  HYPERFRAMES_VERSION: "0.9.37"
+  DO_NOT_TRACK: "1"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  tts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      HF_HOME: ${{ github.workspace }}/.hf
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate & extract script
+        run: |
+          [[ "$TASK_ID" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "::error::task_id không hợp lệ"; exit 1; }
+          test -f "nwl_voices/${VOICE}_24kHz.wav" || { echo "::error::Không có giọng '$VOICE'"; exit 1; }
+          case "$VOICE" in vi_*) L=vi ;; en_*) L=en ;; esac
+          echo "LANG_ID=$L" >> "$GITHUB_ENV"
+          mkdir -p work voice_out
+          if [[ -n "$SCRIPT_FILE_ID" ]]; then
+            bash scripts/drive.sh fetch "$SCRIPT_FILE_ID" work/script.txt
+          else
+            unzip -q templates/nw_video_template_offline_v1.zip -d work/tpl
+            python3 scripts/extract_video_script.py \
+              --template-json work/tpl/nw/template-data.json \
+              --video-code "$VIDEO_CODE" --lang "$L" --out work/script.txt
+          fi
+          cat work/script.txt
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-omnivoice.txt
+
+      - name: Install deps & OmniVoice
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg time >/dev/null
+          python -m pip install -q --upgrade pip
+          pip install -q torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -q -r requirements-omnivoice.txt
+
+      - name: Cache model weights
+        uses: actions/cache@v4
+        with:
+          path: .hf
+          key: omnivoice-hf-v1
+
+      - name: Generate speech & normalise (-14 LUFS)
+        timeout-minutes: 75
+        run: |
+          python -u scripts/omnivoice_tts.py \
+            --text-file work/script.txt \
+            --ref-audio "nwl_voices/${VOICE}_24kHz.wav" \
+            --language "$LANG_ID" --num-step "$NUM_STEP" \
+            --out work/raw.wav --meta "voice_out/${TASK_ID}__tts_meta.json"
+          M=$(ffmpeg -hide_banner -nostats -i work/raw.wav \
+                -af "loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:print_format=json" -f null - 2>&1 \
+              | sed -n '/^{/,/^}/p')
+          get() { echo "$M" | python3 -c "import json,sys;print(json.load(sys.stdin)['$1'])"; }
+          ffmpeg -hide_banner -y -i work/raw.wav -af \
+            "loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:measured_I=$(get input_i):measured_TP=$(get input_tp):measured_LRA=$(get input_lra):measured_thresh=$(get input_thresh):offset=$(get target_offset):linear=true" \
+            -ar 24000 -ac 1 -c:a pcm_s16le "voice_out/${TASK_ID}__voice.wav"
+          python3 scripts/qa.py audio "voice_out/${TASK_ID}__voice.wav" \
+            --sr 24000 --channels 1 --lufs "$TARGET_LUFS" --lufs-tol 1.0 \
+            --out "voice_out/${TASK_ID}__voice_qa.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-${{ env.TASK_ID }}
+          path: voice_out/
+          retention-days: 7
+
+  render_and_mux:
+    needs: tts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: voice-${{ env.TASK_ID }}
+          path: work/voice
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Cache HyperFrames browser
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/hyperframes
+            ~/.cache/puppeteer
+          key: hf-browser-${{ env.HYPERFRAMES_VERSION }}-${{ runner.os }}
+
+      - name: Install ffmpeg + HyperFrames
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg time >/dev/null
+          npm install -g "hyperframes@${HYPERFRAMES_VERSION}" --no-fund --no-audit
+          hyperframes browser ensure
+
+      - name: Sync template, render & mux AAC 192k
+        run: |
+          T0=$(date +%s)
+          mkdir -p out
+          cp "work/voice/${TASK_ID}__voice.wav" "out/${TASK_ID}__voice.wav"
+          cp "work/voice/${TASK_ID}__tts_meta.json" "out/${TASK_ID}__tts_meta.json"
+          unzip -q templates/nw_video_template_offline_v1.zip -d work/
+          ADUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "out/${TASK_ID}__voice.wav")
+          SYNC_JSON=$(python3 scripts/sync_template_timing.py \
+            --html work/nw/index.html \
+            --video-code "$VIDEO_CODE" \
+            --audio-duration "$ADUR" \
+            --tts-meta "out/${TASK_ID}__tts_meta.json")
+          echo "$SYNC_JSON" | tee "out/${TASK_ID}__sync.json"
+          VSTART=$(python3 -c "import json,sys;print(json.loads(sys.argv[1])['start'])" "$SYNC_JSON")
+          VEND=$(python3 -c "import json,sys;print(json.loads(sys.argv[1])['end'])" "$SYNC_JSON")
+          VDUR=$(python3 -c "print(float('$VEND')-float('$VSTART'))")
+
+          hyperframes render work/nw \
+            -o work/silent.mp4 \
+            --fps "$FPS" --start "$VSTART" --end "$VEND" \
+            --quality looks --resolution portrait --workers auto
+
+          ffmpeg -hide_banner -y \
+            -i work/silent.mp4 -i "out/${TASK_ID}__voice.wav" \
+            -map 0:v:0 -map 1:a:0 \
+            -c:v copy \
+            -af "apad" -t "$VDUR" \
+            -c:a aac -b:a 192k -ar 48000 -ac 2 \
+            -movflags +faststart \
+            "out/${TASK_ID}__reel.mp4"
+
+          python3 scripts/qa.py video "out/${TASK_ID}__reel.mp4" \
+            --width 1080 --height 1920 --fps "$FPS" --duration "$VDUR" \
+            --require-audio --lufs -14 --lufs-tol 1.5 \
+            --out "out/${TASK_ID}__qa.json"
+          echo "T_MUX=$(( $(date +%s) - T0 ))" >> "$GITHUB_ENV"
+
+      - name: Write E2E report
+        run: |
+          {
+            echo "# ${TASK_ID} — NWL Full Reel E2E (${VIDEO_CODE} + ${VOICE})"
+            echo
+            echo "- Run: [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+            echo "- Render + Mux time: ${T_MUX} s"
+            echo
+            echo "## QA"
+            echo '```json'
+            cat "out/${TASK_ID}__qa.json"
+            echo '```'
+          } > "out/${TASK_ID}__reel_report.md"
+          cat "out/${TASK_ID}__reel_report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ env.TASK_ID }}
+          path: out/
+          retention-days: 14
+
+      - name: Push to RESULTS (ResultsUploader)
+        if: success() && env.UPLOAD == 'true'
+        env:
+          RESULTS_UPLOAD_URL: ${{ secrets.RESULTS_UPLOAD_URL }}
+          RESULTS_UPLOAD_SECRET: ${{ secrets.RESULTS_UPLOAD_SECRET }}
+        run: |
+          P="GHA_REEL_${GITHUB_RUN_ID}_${TASK_ID}"
+          U=scripts/gha_upload_to_results.sh
+          bash $U "out/${TASK_ID}__reel.mp4"        video/mp4        "${P}_reel.mp4"
+          bash $U "out/${TASK_ID}__voice.wav"       audio/wav        "${P}_voice.wav"
+          bash $U "out/${TASK_ID}__reel_report.md"  text/markdown    "${P}_reel_report.md"
+          bash $U "out/${TASK_ID}__qa.json"         application/json "${P}_qa.json"

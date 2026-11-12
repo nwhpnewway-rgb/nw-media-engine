@@ -1,0 +1,203 @@
+name: omnivoice-tts
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: "Task ID (vd VOICE_20261113_01) - dùng làm tiền tố tên file"
+        required: true
+      voice:
+        description: "vi_male_nhat_phong | vi_female_mai | en_male_adam | en_female_claire"
+        required: false
+        default: "vi_male_nhat_phong"
+      script_text:
+        description: "Kịch bản (ngắn). Kịch bản dài: dùng script_file_id"
+        required: false
+        default: ""
+      script_file_id:
+        description: "Drive file ID của file .txt kịch bản (ưu tiên hơn script_text)"
+        required: false
+        default: ""
+      ref_text:
+        description: "Lời của file giọng mẫu (để trống = Whisper tự nhận dạng)"
+        required: false
+        default: ""
+      speed:
+        description: "Tốc độ đọc"
+        required: false
+        default: "1.0"
+      num_step:
+        description: "Số bước diffusion (16 nhanh, 32 chuẩn)"
+        required: false
+        default: "32"
+      min_duration:
+        description: "QA: thời lượng tối thiểu (giây), 0 = bỏ qua"
+        required: false
+        default: "0"
+      upload_to_drive:
+        description: "Đẩy kết quả lên RESULTS qua ResultsUploader"
+        type: boolean
+        default: true
+  repository_dispatch:
+    types: [omnivoice-tts]
+
+concurrency:
+  group: omnivoice-${{ github.event.inputs.task_id || github.event.client_payload.task_id }}
+  cancel-in-progress: false
+
+env:
+  TASK_ID: ${{ github.event.inputs.task_id || github.event.client_payload.task_id }}
+  VOICE: ${{ github.event.inputs.voice || github.event.client_payload.voice || 'vi_male_nhat_phong' }}
+  SCRIPT_TEXT: ${{ github.event.inputs.script_text || github.event.client_payload.script_text || '' }}
+  SCRIPT_FILE_ID: ${{ github.event.inputs.script_file_id || github.event.client_payload.script_file_id || '' }}
+  REF_TEXT: ${{ github.event.inputs.ref_text || github.event.client_payload.ref_text || '' }}
+  SPEED: ${{ github.event.inputs.speed || github.event.client_payload.speed || '1.0' }}
+  NUM_STEP: ${{ github.event.inputs.num_step || github.event.client_payload.num_step || '32' }}
+  MIN_DURATION: ${{ github.event.inputs.min_duration || github.event.client_payload.min_duration || '0' }}
+  UPLOAD: ${{ github.event.inputs.upload_to_drive || github.event.client_payload.upload_to_drive || 'true' }}
+  TARGET_LUFS: "-14"
+  HF_HOME: ${{ github.workspace }}/.hf
+  HF_HUB_DISABLE_TELEMETRY: "1"
+
+defaults:
+  run:
+    shell: bash  # => bash -eo pipefail
+
+jobs:
+  tts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          [[ "$TASK_ID" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "::error::task_id không hợp lệ"; exit 1; }
+          test -f "nwl_voices/${VOICE}_24kHz.wav" || { echo "::error::Không có giọng '$VOICE'"; exit 1; }
+          [[ -n "$SCRIPT_TEXT$SCRIPT_FILE_ID" ]] || { echo "::error::Cần script_text hoặc script_file_id"; exit 1; }
+          case "$VOICE" in vi_*) echo "LANG_ID=vi" ;; en_*) echo "LANG_ID=en" ;; esac >> "$GITHUB_ENV"
+          echo "T_START=$(date +%s)" >> "$GITHUB_ENV"
+          nproc; free -h; df -h .
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-omnivoice.txt
+
+      - name: Install system deps (ffmpeg)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg time >/dev/null
+
+      - name: Install OmniVoice (CPU torch)
+        run: |
+          T0=$(date +%s)
+          python -m pip install -q --upgrade pip
+          pip install -q torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -q -r requirements-omnivoice.txt
+          python -c "import torch, omnivoice; print('torch', torch.__version__)"
+          echo "T_INSTALL=$(( $(date +%s) - T0 ))" >> "$GITHUB_ENV"
+
+      - name: Cache model weights
+        uses: actions/cache@v4
+        with:
+          path: .hf
+          key: omnivoice-hf-v1
+
+      - name: Prepare script text
+        run: |
+          mkdir -p work out
+          if [[ -n "$SCRIPT_FILE_ID" ]]; then
+            bash scripts/drive.sh fetch "$SCRIPT_FILE_ID" work/script.txt
+          else
+            printf '%s\n' "$SCRIPT_TEXT" > work/script.txt
+          fi
+          wc -m work/script.txt
+
+      - name: Generate speech (OmniVoice)
+        timeout-minutes: 75
+        run: |
+          T0=$(date +%s)
+          ( while sleep 60; do echo "[mem] $(free -m | awk '/Mem:/{print "used="$3"MB avail="$7"MB"}') $(free -m | awk '/Swap:/{print "swap="$3"MB"}')"; done ) &
+          MEMPID=$!
+          trap 'kill $MEMPID 2>/dev/null || true' EXIT
+          /usr/bin/time -v -o work/time.txt \
+            python -u scripts/omnivoice_tts.py \
+              --text-file work/script.txt \
+              --ref-audio "nwl_voices/${VOICE}_24kHz.wav" \
+              --ref-text "$REF_TEXT" \
+              --language "$LANG_ID" --speed "$SPEED" --num-step "$NUM_STEP" \
+              --out work/raw.wav --meta "out/${TASK_ID}__tts_meta.json" 2>&1 | tee work/tts.log
+          echo "T_TTS=$(( $(date +%s) - T0 ))" >> "$GITHUB_ENV"
+          echo "PEAK_RSS_KB=$(awk -F': ' '/Maximum resident set size/{print $2}' work/time.txt)" >> "$GITHUB_ENV"
+
+      - name: Loudness normalise (-14 LUFS, 24 kHz mono PCM16)
+        run: |
+          M=$(ffmpeg -hide_banner -nostats -i work/raw.wav \
+                -af "loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:print_format=json" -f null - 2>&1 \
+              | sed -n '/^{/,/^}/p')
+          echo "$M"
+          get() { echo "$M" | python3 -c "import json,sys;print(json.load(sys.stdin)['$1'])"; }
+          ffmpeg -hide_banner -y -i work/raw.wav -af \
+            "loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:measured_I=$(get input_i):measured_TP=$(get input_tp):measured_LRA=$(get input_lra):measured_thresh=$(get input_thresh):offset=$(get target_offset):linear=true" \
+            -ar 24000 -ac 1 -c:a pcm_s16le "out/${TASK_ID}__voice.wav"
+
+      - name: QA gate (ffprobe + ebur128)
+        run: |
+          python3 scripts/qa.py audio "out/${TASK_ID}__voice.wav" \
+            --sr 24000 --channels 1 --lufs "$TARGET_LUFS" --lufs-tol 1.0 \
+            --min-duration "$MIN_DURATION" --out "out/${TASK_ID}__qa.json"
+
+      - name: Write report
+        if: always()
+        run: |
+          mkdir -p out
+          T_TOTAL=$(( $(date +%s) - T_START ))
+          QA_PASS=$(python3 -c "import json;print(json.load(open('out/${TASK_ID}__qa.json'))['pass'])" 2>/dev/null || echo "N/A")
+          {
+            echo "# ${TASK_ID} — OmniVoice TTS (GitHub Actions)"
+            echo
+            echo "| Hạng mục | Giá trị |"
+            echo "|---|---|"
+            echo "| Repo / run | ${GITHUB_REPOSITORY} / [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) |"
+            echo "| Runner | $(nproc) vCPU, $(free -g | awk '/Mem:/{print $2}') GB RAM, CPU only |"
+            echo "| Giọng | ${VOICE} (lang=${LANG_ID}) |"
+            echo "| Cài đặt (torch CPU + omnivoice) | ${T_INSTALL:-N/A} s |"
+            echo "| Tạo giọng (gồm tải/nạp mô hình) | ${T_TTS:-N/A} s |"
+            echo "| Peak RSS | $(( ${PEAK_RSS_KB:-0} / 1024 )) MB |"
+            echo "| Tổng job đến bước báo cáo | ${T_TOTAL} s |"
+            echo "| QA | ${QA_PASS} |"
+            echo
+            echo "## TTS meta"
+            echo '```json'
+            cat "out/${TASK_ID}__tts_meta.json" 2>/dev/null || echo "{}"
+            echo '```'
+            echo "## QA chi tiết"
+            echo '```json'
+            cat "out/${TASK_ID}__qa.json" 2>/dev/null || echo "{}"
+            echo '```'
+          } > "out/${TASK_ID}__voice_report.md"
+          cat "out/${TASK_ID}__voice_report.md" >> "$GITHUB_STEP_SUMMARY"
+          cp work/tts.log "out/${TASK_ID}__tts.log" 2>/dev/null || true
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TASK_ID }}
+          path: out/
+          retention-days: 14
+
+      - name: Push to RESULTS (ResultsUploader)
+        if: success() && env.UPLOAD == 'true'
+        env:
+          RESULTS_UPLOAD_URL: ${{ secrets.RESULTS_UPLOAD_URL }}
+          RESULTS_UPLOAD_SECRET: ${{ secrets.RESULTS_UPLOAD_SECRET }}
+        run: |
+          P="GHA_OV_${GITHUB_RUN_ID}_${TASK_ID}"
+          U=scripts/gha_upload_to_results.sh
+          bash $U "out/${TASK_ID}__voice.wav"         audio/wav        "${P}_voice.wav"
+          bash $U "out/${TASK_ID}__voice_report.md"   text/markdown    "${P}_voice_report.md"
+          bash $U "out/${TASK_ID}__qa.json"           application/json "${P}_qa.json"
+          bash $U "out/${TASK_ID}__tts_meta.json"     application/json "${P}_tts_meta.json"

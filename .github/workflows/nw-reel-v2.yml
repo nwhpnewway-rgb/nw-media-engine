@@ -1,0 +1,309 @@
+name: nw-reel-v2
+
+# Reel v2: kịch bản reel.json -> giọng Nhất Phong (OmniVoice, 4 runner song song) -> HTML nw_reel_v2
+# (nội dung slide sinh từ kịch bản + nền ảnh logistics Ken Burns) -> HyperFrames -> MP4 có tiếng -> RESULTS.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reel_id:
+        description: "Thư mục kịch bản trong reels/ (vd GIA_PHAN_BON_20261112)"
+        required: true
+      spec_file_id:
+        description: "Tuỳ chọn: Drive file ID của reel.json (ưu tiên hơn reels/<reel_id>/reel.json)"
+        required: false
+        default: ""
+      voice:
+        description: "vi_male_nhat_phong | vi_female_mai | en_male_adam | en_female_claire"
+        required: false
+        default: "vi_male_nhat_phong"
+      num_step:
+        description: "Số bước diffusion OmniVoice (16 nhanh, 32 chuẩn)"
+        required: false
+        default: "32"
+      shards:
+        description: "Số runner TTS song song (1-6)"
+        required: false
+        default: "4"
+      upload_to_drive:
+        description: "Đẩy kết quả lên RESULTS qua ResultsUploader"
+        type: boolean
+        default: true
+  repository_dispatch:
+    types: [nw-reel-v2]
+
+concurrency:
+  group: reel-v2-${{ github.event.inputs.reel_id || github.event.client_payload.reel_id }}
+  cancel-in-progress: false
+
+env:
+  REEL_ID: ${{ github.event.inputs.reel_id || github.event.client_payload.reel_id }}
+  TASK_ID: ${{ github.event.client_payload.task_id || github.event.inputs.reel_id || github.event.client_payload.reel_id }}
+  SPEC_FILE_ID: ${{ github.event.inputs.spec_file_id || github.event.client_payload.spec_file_id || '' }}
+  VOICE: ${{ github.event.inputs.voice || github.event.client_payload.voice || 'vi_male_nhat_phong' }}
+  NUM_STEP: ${{ github.event.inputs.num_step || github.event.client_payload.num_step || '32' }}
+  SHARDS: ${{ github.event.inputs.shards || github.event.client_payload.shards || '4' }}
+  UPLOAD: ${{ github.event.inputs.upload_to_drive || github.event.client_payload.upload_to_drive || 'true' }}
+  TARGET_LUFS: "-14"
+  HYPERFRAMES_VERSION: "0.9.37"
+  DO_NOT_TRACK: "1"
+  HF_HOME: ${{ github.workspace }}/.hf
+  HF_HUB_DISABLE_TELEMETRY: "1"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.sh.outputs.matrix }}
+      reject: ${{ steps.sh.outputs.reject }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load spec & split TTS shards
+        id: sh
+        env:
+          # Kịch bản do Newway viết, Bridge (Apps Script) gửi kèm dạng base64 — chỉ là DỮ LIỆU, luôn qua reel_spec.py
+          SPEC_B64: ${{ github.event.client_payload.spec_b64 || '' }}
+        run: |
+          [[ "$REEL_ID" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "::error::reel_id không hợp lệ"; exit 1; }
+          [[ "$SHARDS" =~ ^[1-6]$ ]] || { echo "::error::shards phải 1-6"; exit 1; }
+          mkdir -p work
+          if [[ -n "$SPEC_B64" ]]; then
+            printf '%s' "$SPEC_B64" | base64 -d > work/reel_raw.json
+          elif [[ -n "$SPEC_FILE_ID" ]]; then
+            bash scripts/drive.sh fetch "$SPEC_FILE_ID" work/reel_raw.json
+          else
+            cp "reels/${REEL_ID}/reel.json" work/reel_raw.json
+          fi
+          RC=0; python3 scripts/reel_spec.py work/reel_raw.json work/reel.json --reel-id "$REEL_ID" > work/spec_check.txt 2>&1 || RC=$?
+          cat work/spec_check.txt
+          if [[ $RC -ne 0 ]]; then
+            MSG=$(grep -m1 SPEC_REJECTED work/spec_check.txt | tr -d '\r' | head -c 300)
+            echo "reject=${MSG:-SPEC_REJECTED}" >> "$GITHUB_OUTPUT"
+            echo "::error::Kịch bản bị từ chối: ${MSG}"; exit 1
+          fi
+          OUT=$(python3 scripts/reel_v2.py shards --spec work/reel.json --shards "$SHARDS" --out-dir work/shards)
+          echo "$OUT"
+          echo "matrix=$(echo "$OUT" | sed -n 's/^MATRIX=//p')" >> "$GITHUB_OUTPUT"
+          cp work/reel.json work/shards/reel.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan-${{ env.REEL_ID }}
+          path: work/shards/
+          retention-days: 3
+
+  tts:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan-${{ env.REEL_ID }}
+          path: work/plan
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-omnivoice.txt
+      - name: Install OmniVoice (CPU)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg time >/dev/null
+          python -m pip install -q --upgrade pip
+          pip install -q torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -q -r requirements-omnivoice.txt
+      - name: Cache model weights
+        uses: actions/cache@v4
+        with:
+          path: .hf
+          key: omnivoice-hf-v1
+      - name: Generate shard ${{ matrix.shard }}
+        timeout-minutes: 100
+        run: |
+          OFFSET=$(python3 -c "import json;m=json.load(open('work/plan/parts.json'))['shards'];print([x for x in m if x['shard']==${{ matrix.shard }}][0]['offset'])")
+          REF_TXT=""
+          [[ -f "nwl_voices/${VOICE}.txt" ]] && REF_TXT="$(cat "nwl_voices/${VOICE}.txt")"
+          case "$VOICE" in vi_*) L=vi ;; *) L=en ;; esac
+          cat "work/plan/shard_${{ matrix.shard }}.txt"
+          /usr/bin/time -v -o work/time.txt python -u scripts/omnivoice_tts.py \
+            --text-file "work/plan/shard_${{ matrix.shard }}.txt" --one-per-line \
+            --ref-audio "nwl_voices/${VOICE}_24kHz.wav" --ref-text "$REF_TXT" \
+            --language "$L" --num-step "$NUM_STEP" \
+            --chunks-dir work/chunks --index-offset "$OFFSET" \
+            --out work/shard.wav --meta "work/chunks/shard_${{ matrix.shard }}_meta.json"
+          grep -E "Maximum resident|Elapsed" work/time.txt
+          ls -la work/chunks
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunks-${{ env.REEL_ID }}-${{ matrix.shard }}
+          path: work/chunks/
+          retention-days: 3
+
+  render:
+    needs: tts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Init
+        run: |
+          echo "T_START=$(date +%s)" >> "$GITHUB_ENV"
+          mkdir -p work out
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan-${{ env.REEL_ID }}
+          path: work/plan
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chunks-${{ env.REEL_ID }}-*
+          path: work/chunks
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install ffmpeg + HyperFrames
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg time >/dev/null
+          npm install -g "hyperframes@${HYPERFRAMES_VERSION}" --no-fund --no-audit
+          hyperframes browser ensure
+
+      - name: Assemble voice + timings, loudnorm -14 LUFS
+        run: |
+          P="out/${REEL_ID}"
+          python3 scripts/reel_v2.py assemble --spec work/plan/reel.json --chunks-dir work/chunks \
+            --out-wav work/voice_raw.wav --out-timings "${P}__timings.json"
+          M=$(ffmpeg -hide_banner -nostats -i work/voice_raw.wav \
+                -af "loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:print_format=json" -f null - 2>&1 | sed -n '/^{/,/^}/p')
+          get() { echo "$M" | python3 -c "import json,sys;print(json.load(sys.stdin)['$1'])"; }
+          ffmpeg -hide_banner -y -i work/voice_raw.wav -af \
+            "loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:measured_I=$(get input_i):measured_TP=$(get input_tp):measured_LRA=$(get input_lra):measured_thresh=$(get input_thresh):offset=$(get target_offset):linear=true" \
+            -ar 24000 -ac 1 -c:a pcm_s16le "${P}__voice_24k.wav"
+          DUR=$(python3 -c "import json;print(json.load(open('${P}__timings.json'))['total_s'])")
+          echo "DUR=$DUR" >> "$GITHUB_ENV"
+
+      - name: Build HTML project from script
+        run: |
+          python3 scripts/reel_v2.py build --spec work/plan/reel.json \
+            --timings "out/${REEL_ID}__timings.json" --out-dir work/proj
+          cp work/plan/reel.json "out/${REEL_ID}__reel.json"
+
+      - name: Render (HyperFrames) + mux AAC 192k
+        run: |
+          T0=$(date +%s)
+          /usr/bin/time -v -o work/time.txt hyperframes render work/proj -o work/silent.mp4 \
+            --fps 30 --start 0 --end "$DUR" --quality looks --resolution portrait --workers auto 2>&1 | tee work/render.log
+          echo "T_RENDER=$(( $(date +%s) - T0 ))" >> "$GITHUB_ENV"
+          echo "PEAK_RSS_KB=$(awk -F': ' '/Maximum resident set size/{print $2}' work/time.txt)" >> "$GITHUB_ENV"
+          ffmpeg -hide_banner -y -i work/silent.mp4 -i "out/${REEL_ID}__voice_24k.wav" \
+            -map 0:v:0 -map 1:a:0 -c:v libx264 -profile:v high -level:v 4.2 -pix_fmt yuv420p -crf 20 -preset medium \
+            -af apad -t "$DUR" -c:a aac -b:a 192k -ar 48000 -ac 2 -movflags +faststart \
+            "out/${REEL_ID}__reels.mp4"
+
+      - name: QA gate
+        run: |
+          python3 scripts/qa.py video "out/${REEL_ID}__reels.mp4" --width 1080 --height 1920 --fps 30 \
+            --duration "$DUR" --require-audio --lufs -14 --lufs-tol 1.5 --out "out/${REEL_ID}__qa.json"
+
+      - name: Frames sheet (giữa mỗi slide)
+        run: |
+          TS=$(python3 -c "import json;t=json.load(open('out/${REEL_ID}__timings.json'));print(' '.join(str(round((s['parts'][-1]['start_s']+s['parts'][-1]['speech_end_s'])/2,2)) for s in t['slides']))")
+          i=0; for t in $TS; do ffmpeg -v error -y -ss "$t" -i "out/${REEL_ID}__reels.mp4" -frames:v 1 -vf scale=270:480 "work/f_$i.png"; i=$((i+1)); done
+          ffmpeg -v error -y $(for k in $(seq 0 $((i-1))); do echo -n "-i work/f_$k.png "; done) \
+            -filter_complex "$(for k in $(seq 0 $((i-1))); do echo -n "[$k]"; done)hstack=inputs=$i" "out/${REEL_ID}__frames.png"
+
+      - name: Write report
+        if: always()
+        run: |
+          T_TOTAL=$(( $(date +%s) - T_START ))
+          QA_PASS=$(python3 -c "import json;print(json.load(open('out/${REEL_ID}__qa.json'))['pass'])" 2>/dev/null || echo "N/A")
+          {
+            echo "# ${REEL_ID} — Reel v2 (GitHub Actions)"
+            echo
+            echo "| Hạng mục | Giá trị |"
+            echo "|---|---|"
+            echo "| Repo / run | ${GITHUB_REPOSITORY} / [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) |"
+            echo "| Giọng | ${VOICE} · OmniVoice num_step=${NUM_STEP} · ${SHARDS} runner song song |"
+            echo "| Template | templates/nw_reel_v2 (nội dung sinh từ kịch bản, nền ảnh logistics Ken Burns) |"
+            echo "| Thời lượng | ${DUR:-N/A} s @ 30fps |"
+            echo "| Dựng (render) | ${T_RENDER:-N/A} s · Peak RSS $(( ${PEAK_RSS_KB:-0} / 1024 )) MB |"
+            echo "| Job render tổng | ${T_TOTAL} s |"
+            echo "| QA | ${QA_PASS} |"
+            echo
+            echo "## Nguồn số liệu"
+            python3 -c "import json;[print(f\"- [{s['name']}]({s['url']})\") for s in json.load(open('work/plan/reel.json')).get('sources',[])]" 2>/dev/null || true
+            echo
+            echo "## QA chi tiết"
+            echo '```json'
+            cat "out/${REEL_ID}__qa.json" 2>/dev/null || echo "{}"
+            echo '```'
+          } > "out/${REEL_ID}__report.md"
+          cat "out/${REEL_ID}__report.md" >> "$GITHUB_STEP_SUMMARY"
+          cp work/render.log "out/${REEL_ID}__render.log" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ env.REEL_ID }}
+          path: out/
+          retention-days: 14
+
+      - name: Push to RESULTS (ResultsUploader)
+        if: success() && env.UPLOAD == 'true'
+        env:
+          RESULTS_UPLOAD_URL: ${{ secrets.RESULTS_UPLOAD_URL }}
+          RESULTS_UPLOAD_SECRET: ${{ secrets.RESULTS_UPLOAD_SECRET }}
+        run: |
+          P="GHA_R2_${GITHUB_RUN_ID}_${REEL_ID}"
+          U=scripts/gha_upload_to_results.sh
+          bash $U "out/${REEL_ID}__reels.mp4"     video/mp4        "${P}_reels.mp4"
+          bash $U "out/${REEL_ID}__voice_24k.wav" audio/wav        "${P}_voice_24k.wav"
+          bash $U "out/${REEL_ID}__frames.png"    image/png        "${P}_frames.png"
+          bash $U "out/${REEL_ID}__report.md"     text/markdown    "${P}_report.md"
+          bash $U "out/${REEL_ID}__qa.json"       application/json "${P}_qa.json"
+          bash $U "out/${REEL_ID}__reel.json"     application/json "${P}_reel.json"
+
+  # Luôn chạy: báo trạng thái cuối về RESULTS để Bridge cập nhật GSheet Pipeline (DONE / FAIL)
+  status:
+    needs: [plan, tts, render]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Push status.json
+        if: env.UPLOAD == 'true'
+        env:
+          RESULTS_UPLOAD_URL: ${{ secrets.RESULTS_UPLOAD_URL }}
+          RESULTS_UPLOAD_SECRET: ${{ secrets.RESULTS_UPLOAD_SECRET }}
+          R_PLAN: ${{ needs.plan.result }}
+          R_TTS: ${{ needs.tts.result }}
+          R_RENDER: ${{ needs.render.result }}
+          REJECT: ${{ needs.plan.outputs.reject }}
+        run: |
+          [[ "$TASK_ID" =~ ^[A-Za-z0-9_-]+$ ]] || TASK_ID="$REEL_ID"
+          python3 - > status.json <<'PY'
+          import json, os
+          r = {k: os.environ[v] for k, v in (("plan", "R_PLAN"), ("tts", "R_TTS"), ("render", "R_RENDER"))}
+          ok = all(x == "success" for x in r.values())
+          failed = next((k for k, x in r.items() if x not in ("success", "skipped")), "")
+          run = os.environ["GITHUB_RUN_ID"]
+          p = f"GHA_R2_{run}_{os.environ['REEL_ID']}"
+          print(json.dumps({
+            "schema": "nw-reel-v2-status", "task_id": os.environ["TASK_ID"], "reel_id": os.environ["REEL_ID"],
+            "status": "DONE" if ok else "FAIL", "jobs": r, "failed_job": "" if ok else failed,
+            "reason": "" if ok else (os.environ.get("REJECT") or f"job {failed} lỗi — xem run"),
+            "run_id": run, "run_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run}",
+            "files": [f"{p}_{s}" for s in ("reels.mp4", "voice_24k.wav", "frames.png", "report.md", "qa.json", "reel.json")] if ok else [],
+          }, ensure_ascii=False, indent=1))
+          PY
+          cat status.json
+          bash scripts/gha_upload_to_results.sh status.json application/json "GHA_R2_${GITHUB_RUN_ID}_${REEL_ID}_status.json"

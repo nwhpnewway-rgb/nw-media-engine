@@ -1,0 +1,226 @@
+{
+  "schema": "nw2-e2e-reels-scripts-v1",
+  "target_min_duration_s": 61.5,
+  "videos": {
+    "V02": {
+      "video_id": "v2",
+      "title": "Chuỗi Cung Ứng & Vận Tải Phân Bón Toàn Diện (Ure, DAP, NPK, Kali)",
+      "slides": [
+        {
+          "slide": 1,
+          "parts": [
+            {
+              "display": "Cao điểm mùa vụ, vận chuyển phân bón ngại nhất ẩm ướt vón cục và chậm lịch!",
+              "tts": "Cao điểm mùa vụ, vận chuyển phân bón ngại nhất ẩm ướt vón cục và chậm lịch."
+            },
+            {
+              "display": "NEWWAY Logistics tiếp nhận hàng rời, đóng bao chuẩn tịnh và phân phối suốt ngày đêm.",
+              "tts": "New Way Logistics tiếp nhận hàng rời, đóng bao chuẩn tịnh và phân phối suốt ngày đêm."
+            }
+          ]
+        },
+        {
+          "slide": 2,
+          "parts": [
+            {
+              "display": "Triển khai chuỗi vận tải phân bón khép kín từ cầu cảng biển về tận đại lý.",
+              "tts": "Triển khai chuỗi vận tải phân bón khép kín từ cầu cảng biển về tận đại lý."
+            },
+            {
+              "display": "Kết hợp sà lan tải trọng lớn đường thủy nội địa cùng đầu kéo phủ bạt kín.",
+              "tts": "Kết hợp sà lan tải trọng lớn đường thủy nội địa, cùng đầu kéo phủ bạt kín."
+            }
+          ]
+        },
+        {
+          "slide": 3,
+          "parts": [
+            {
+              "display": "Tại cảng, hệ thống cẩu phễu tự động đóng bao năm mươi ký và bao Jumbo.",
+              "tts": "Tại cảng, hệ thống cẩu phễu tự động đóng bao năm mươi ký và bao Giăm bô."
+            },
+            {
+              "display": "Mọi hầm sà lan, container và sàn kho đều kiểm tra độ ẩm, kê pallet chuẩn.",
+              "tts": "Mọi hầm sà lan, công te nơ và sàn kho đều kiểm tra độ ẩm, kê pa lét chuẩn."
+            }
+          ]
+        },
+        {
+          "slide": 4,
+          "parts": [
+            {
+              "display": "Phân đạm Ure và NPK rất nhạy ẩm, dễ đóng bánh nếu gặp hơi muối biển.",
+              "tts": "Phân đạm U rê và Nờ Pê Ka rất nhạy ẩm, dễ đóng bánh nếu gặp hơi muối biển."
+            },
+            {
+              "display": "NEWWAY khử muối hầm hàng, móc cẩu đúng quy cách, đối chiếu cân điện tử hai đầu.",
+              "tts": "New Way khử muối hầm hàng, móc cẩu đúng quy cách, đối chiếu cân điện tử hai đầu."
+            }
+          ]
+        },
+        {
+          "slide": 5,
+          "parts": [
+            {
+              "display": "Đưa lô hàng lớn xuống sà lan nội địa giúp giảm mạnh chi phí mỗi tấn phân.",
+              "tts": "Đưa lô hàng lớn xuống sà lan nội địa giúp giảm mạnh chi phí mỗi tấn phân."
+            },
+            {
+              "display": "Giải phóng nhanh tại cảng tránh phí phạt, đầu kéo giao thẳng vào từng vùng trồng.",
+              "tts": "Giải phóng nhanh tại cảng tránh phí phạt, đầu kéo giao thẳng vào từng vùng trồng."
+            }
+          ]
+        },
+        {
+          "slide": 6,
+          "parts": [
+            {
+              "display": "Trọn gói ba mắt xích: thông quan hợp quy, lưu kho phân khu riêng và điều xe.",
+              "tts": "Trọn gói ba mắt xích: thông quan hợp quy, lưu kho phân khu riêng và điều xe."
+            },
+            {
+              "display": "Kỷ luật nghiêm ngặt: ngừng bốc xếp hàng rời ngoài trời khi độ ẩm vượt ngưỡng mưa.",
+              "tts": "Kỷ luật nghiêm ngặt: ngừng bốc xếp hàng rời ngoài trời khi độ ẩm vượt ngưỡng mưa."
+            }
+          ]
+        },
+        {
+          "slide": 7,
+          "parts": [
+            {
+              "display": "Phục vụ đầy đủ Ure, DAP, NPK, Kali, phân lân và phân hữu cơ liên tỉnh.",
+              "tts": "Phục vụ đầy đủ U rê, Đê A Pê, Nờ Pê Ka, Ka li, phân lân và phân hữu cơ liên tỉnh."
+            },
+            {
+              "display": "Đáp ứng linh hoạt từ hàng xá rời, bao truyền thống đến bao Jumbo một tấn.",
+              "tts": "Đáp ứng linh hoạt từ hàng xá rời, bao truyền thống đến bao Giăm bô một tấn."
+            }
+          ]
+        },
+        {
+          "slide": 8,
+          "parts": [
+            {
+              "display": "Sẵn sàng cho mùa vụ mới với lộ trình sà lan, kho đóng bao và xe đầu kéo!",
+              "tts": "Sẵn sàng cho mùa vụ mới với lộ trình sà lan, kho đóng bao và xe đầu kéo."
+            },
+            {
+              "display": "Lưu video và liên hệ NEWWAY Logistics ngay hôm nay để nhận báo giá trọn gói!",
+              "tts": "Lưu vi đê ô và liên hệ New Way Logistics ngay hôm nay, để nhận báo giá trọn gói."
+            }
+          ]
+        }
+      ]
+    },
+    "V01": {
+      "video_id": "v1",
+      "title": "Giải Pháp Logistics Đa Phương Thức Toàn Diện",
+      "slides": [
+        {
+          "slide": 1,
+          "parts": [
+            {
+              "display": "Cần vận tải đa phương thức cho phân bón, thức ăn chăn nuôi và khí CO₂?",
+              "tts": "Cần vận tải đa phương thức cho phân bón, thức ăn chăn nuôi và khí Cê Ô hai?"
+            },
+            {
+              "display": "Kết nối một đầu mối cùng NEWWAY Logistics: cảng biển, sà lan, kho bãi, đầu kéo!",
+              "tts": "Kết nối một đầu mối cùng New Way Logistics: cảng biển, sà lan, kho bãi và đầu kéo."
+            }
+          ]
+        },
+        {
+          "slide": 2,
+          "parts": [
+            {
+              "display": "NEWWAY Logistics cung cấp chuỗi dịch vụ tích hợp từ cầu cảng đến tận nhà máy.",
+              "tts": "New Way Logistics cung cấp chuỗi dịch vụ tích hợp từ cầu cảng đến tận nhà máy."
+            },
+            {
+              "display": "Điều phối hai bốn trên bảy trên năm mảng cốt lõi, xóa bỏ đứt quãng chứng từ.",
+              "tts": "Điều phối hai mươi tư trên bảy trên năm mảng cốt lõi, xóa bỏ đứt quãng chứng từ."
+            }
+          ]
+        },
+        {
+          "slide": 3,
+          "parts": [
+            {
+              "display": "Vận hành đồng bộ năm khâu: hải quan, cảng biển, sà lan, kho bãi và xe bồn.",
+              "tts": "Vận hành đồng bộ năm khâu: hải quan, cảng biển, sà lan, kho bãi và xe bồn."
+            },
+            {
+              "display": "Theo dõi tiến độ lô hàng thời gian thực, tuân thủ nghiêm chuẩn an toàn HSSE.",
+              "tts": "Theo dõi tiến độ lô hàng thời gian thực, tuân thủ nghiêm chuẩn an toàn hát ét ét e."
+            }
+          ]
+        },
+        {
+          "slide": 4,
+          "parts": [
+            {
+              "display": "Thiết kế quy trình chuyên biệt cho từng mặt hàng, không dùng chung đại trà.",
+              "tts": "Thiết kế quy trình chuyên biệt cho từng mặt hàng, không dùng chung đại trà."
+            },
+            {
+              "display": "Phân bón chống ẩm, thức ăn chăn nuôi sạch, bồn khí CO₂ bảo ôn chuẩn áp lực.",
+              "tts": "Phân bón chống ẩm, thức ăn chăn nuôi sạch, bồn khí Cê Ô hai bảo ôn chuẩn áp lực."
+            }
+          ]
+        },
+        {
+          "slide": 5,
+          "parts": [
+            {
+              "display": "Mô hình đa phương thức khép kín giúp giảm chờ sang mạn và tiết kiệm lưu bãi.",
+              "tts": "Mô hình đa phương thức khép kín giúp giảm chờ sang mạn và tiết kiệm lưu bãi."
+            },
+            {
+              "display": "Kiểm soát tối đa hao hụt hàng rời, giữ nhịp cấp nguyên liệu cho nhà máy.",
+              "tts": "Kiểm soát tối đa hao hụt hàng rời, giữ nhịp cấp nguyên liệu cho nhà máy."
+            }
+          ]
+        },
+        {
+          "slide": 6,
+          "parts": [
+            {
+              "display": "Ba trụ cột vững chắc gồm vận tải thủy bộ linh hoạt và kho khai thác hàng rời.",
+              "tts": "Ba trụ cột vững chắc gồm vận tải thủy bộ linh hoạt và kho khai thác hàng rời."
+            },
+            {
+              "display": "Kết hợp thông quan hải quan, kiểm dịch chuyên ngành và vận hành ISO Tank trọn gói.",
+              "tts": "Kết hợp thông quan hải quan, kiểm dịch chuyên ngành và vận hành I Sô Tanh trọn gói."
+            }
+          ]
+        },
+        {
+          "slide": 7,
+          "parts": [
+            {
+              "display": "Đáp ứng từ xe container hai mươi feet, bốn mươi feet đến sà lan tải trọng lớn.",
+              "tts": "Đáp ứng từ xe công te nơ hai mươi phít, bốn mươi phít đến sà lan tải trọng lớn."
+            },
+            {
+              "display": "Đồng hành cùng nhà máy phân bón, trại chăn nuôi và khu công nghiệp toàn quốc.",
+              "tts": "Đồng hành cùng nhà máy phân bón, trại chăn nuôi và khu công nghiệp toàn quốc."
+            }
+          ]
+        },
+        {
+          "slide": 8,
+          "parts": [
+            {
+              "display": "Tư vấn lộ trình đường bộ, đường thủy, kho bãi và hải quan tối ưu chi phí!",
+              "tts": "Tư vấn lộ trình đường bộ, đường thủy, kho bãi và hải quan tối ưu chi phí."
+            },
+            {
+              "display": "Theo dõi kênh và liên hệ NEWWAY Logistics ngay hôm nay để nhận phương án!",
+              "tts": "Theo dõi kênh và liên hệ New Way Logistics ngay hôm nay, để nhận phương án."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "system": "[NEWWAY SYSTEM] — NWL Muse OmniVoice & Hyperframes 4 Standard Voice Profiles",
+  "voices": {
+    "vi": {
+      "male": {
+        "key": "vi_male_nhat_phong",
+        "name": "Nhất Phong",
+        "lang": "vi",
+        "gender": "male",
+        "style": "Narrative & Compelling (Giọng Nam Tiếng Việt chuẩn Bản tin & Hồ sơ năng lực Newway Logistics)",
+        "orig_mp3": "voice_preview_nhật phong - narrative & compelling.mp3",
+        "mp3_file": "nwl_voices/vi_male_nhat_phong.mp3",
+        "wav_file": "nwl_voices/vi_male_nhat_phong_24kHz.wav"
+      },
+      "female": {
+        "key": "vi_female_mai",
+        "name": "Mai",
+        "lang": "vi",
+        "gender": "female",
+        "style": "Natural, Bright & Authentic (Giọng Nữ Tiếng Việt tự nhiên, sáng, chuẩn Reels/TikTok/Shorts)",
+        "orig_mp3": "voice_preview_mai - natural, bright and authentic.mp3",
+        "mp3_file": "nwl_voices/vi_female_mai.mp3",
+        "wav_file": "nwl_voices/vi_female_mai_24kHz.wav"
+      }
+    },
+    "en": {
+      "male": {
+        "key": "en_male_adam",
+        "name": "Adam",
+        "lang": "en",
+        "gender": "male",
+        "style": "Radio Announcer (Giọng Nam Tiếng Anh chuẩn phát thanh quốc tế & tuyến vận tải Âu/Mỹ)",
+        "orig_mp3": "voice_preview_adam - radio announcer.mp3",
+        "mp3_file": "nwl_voices/en_male_adam.mp3",
+        "wav_file": "nwl_voices/en_male_adam_24kHz.wav"
+      },
+      "female": {
+        "key": "en_female_claire",
+        "name": "Claire",
+        "lang": "en",
+        "gender": "female",
+        "style": "Ultra Real & Natural (Giọng Nữ Tiếng Anh tự nhiên, hiện đại chuẩn Global Supply Chain)",
+        "orig_mp3": "voice_preview_claire - ultra real & natural.mp3",
+        "mp3_file": "nwl_voices/en_female_claire.mp3",
+        "wav_file": "nwl_voices/en_female_claire_24kHz.wav"
+      }
+    }
+  }
+}

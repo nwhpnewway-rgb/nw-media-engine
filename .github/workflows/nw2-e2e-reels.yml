@@ -1,0 +1,302 @@
+name: nw2-e2e-reels
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_code:
+        description: "Mã Video trong bộ HTML Template NW2 (V01..V24, mặc định V02 Phân bón)"
+        required: true
+        default: "V02"
+      task_id:
+        description: "Mã tác vụ (dùng đặt tên file trên RESULTS)"
+        required: true
+        default: "REELS_NW2_20261112_01"
+      voice:
+        description: "Giọng đọc chuẩn NWL (vi_male_nhat_phong | vi_female_mai | en_male_adam | en_female_claire)"
+        required: false
+        default: "vi_male_nhat_phong"
+      num_step:
+        description: "Số bước diffusion OmniVoice (32 chuẩn như VOICE_20261112_01)"
+        required: false
+        default: "32"
+      quality:
+        description: "Chất lượng HyperFrames (draft | looks | delivery)"
+        required: false
+        default: "looks"
+      upload_to_drive:
+        description: "Đẩy kết quả lên RESULTS qua ResultsUploader"
+        type: boolean
+        default: true
+  repository_dispatch:
+    types: [nw2-e2e-reels]
+
+concurrency:
+  group: nw2-e2e-${{ github.event.inputs.task_id || github.event.client_payload.task_id }}
+  cancel-in-progress: false
+
+env:
+  VIDEO_CODE: ${{ github.event.inputs.video_code || github.event.client_payload.video_code || 'V02' }}
+  TASK_ID: ${{ github.event.inputs.task_id || github.event.client_payload.task_id || 'REELS_NW2_20261112_01' }}
+  VOICE: ${{ github.event.inputs.voice || github.event.client_payload.voice || 'vi_male_nhat_phong' }}
+  NUM_STEP: ${{ github.event.inputs.num_step || github.event.client_payload.num_step || '32' }}
+  QUALITY: ${{ github.event.inputs.quality || github.event.client_payload.quality || 'looks' }}
+  UPLOAD: ${{ github.event.inputs.upload_to_drive || github.event.client_payload.upload_to_drive || 'true' }}
+  HF_HOME: ${{ github.workspace }}/.hf
+  HF_HUB_DISABLE_TELEMETRY: "1"
+  HYPERFRAMES_VERSION: "0.9.37"
+  DO_NOT_TRACK: "1"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-reels-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout nw-media-engine
+        uses: actions/checkout@v4
+
+      - name: Validate inputs & inspect runner
+        run: |
+          [[ "$TASK_ID" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "::error::task_id không hợp lệ: '$TASK_ID'"; exit 1; }
+          [[ "$VIDEO_CODE" =~ ^V(0[1-9]|1[0-9]|2[0-4])$ ]] || { echo "::error::video_code không hợp lệ: '$VIDEO_CODE'"; exit 1; }
+          test -f "nwl_voices/${VOICE}_24kHz.wav" || { echo "::error::Không có giọng '$VOICE'"; exit 1; }
+          case "$VOICE" in vi_*) echo "LANG_ID=vi" ;; en_*) echo "LANG_ID=en" ;; esac >> "$GITHUB_ENV"
+          echo "T_START=$(date +%s)" >> "$GITHUB_ENV"
+          nproc; free -h; df -h .
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-omnivoice.txt
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install system deps (ffmpeg, time)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg time >/dev/null
+          ffmpeg -version | head -1
+
+      - name: Cache OmniVoice model weights
+        uses: actions/cache@v4
+        with:
+          path: .hf
+          key: omnivoice-hf-v1
+
+      - name: Cache HyperFrames browser
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/hyperframes
+            ~/.cache/puppeteer
+          key: hf-browser-${{ env.HYPERFRAMES_VERSION }}-${{ runner.os }}
+
+      - name: Bước 1 — Chuẩn bị 16 câu thoại từ NW2 (${{ env.VIDEO_CODE }})
+        run: |
+          mkdir -p work/chunks out
+          python3 scripts/nw2_e2e_pipeline.py prepare-chunks \
+            --base-zip templates/nw2_template_offline_base.zip \
+            --scripts-json templates/nw2_e2e_scripts.json \
+            --video-code "$VIDEO_CODE" \
+            --out-json work/chunks.json
+
+      - name: Bước 2 — Sinh giọng đọc Nhất Phong (OmniVoice 24kHz Mono, giải phóng RAM sau tiến trình)
+        timeout-minutes: 140
+        run: |
+          T0=$(date +%s)
+          python -m pip install -q --upgrade pip
+          pip install -q torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -q -r requirements-omnivoice.txt
+          python -c "import torch, omnivoice; print('torch', torch.__version__)"
+          echo "T_TTS_INSTALL=$(( $(date +%s) - T0 ))" >> "$GITHUB_ENV"
+
+          T1=$(date +%s)
+          ( while sleep 60; do echo "[mem] $(free -m | awk '/Mem:/{print "used="$3"MB avail="$7"MB"}') $(free -m | awk '/Swap:/{print "swap="$3"MB"}')"; done ) &
+          MEMPID=$!
+          trap 'kill $MEMPID 2>/dev/null || true' EXIT
+
+          # Chạy OmniVoice trong tiến trình Python riêng biệt (cùng cấu hình VOICE_20261112_01),
+          # thoát hoàn toàn sau khi ghi xong 16 WAV để giải phóng toàn bộ ~6.6-6.9 GB RAM trước HyperFrames.
+          /usr/bin/time -v -o work/tts_time.txt python -u - <<'PY' 2>&1 | tee work/tts.log
+          import gc
+          import json
+          import os
+          import time
+          from pathlib import Path
+
+          import numpy as np
+          import soundfile as sf
+          import torch
+          from omnivoice import OmniVoice
+
+          SR = 24000
+          torch.set_num_threads(max(1, os.cpu_count() or torch.get_num_threads()))
+
+          meta = json.load(open("work/chunks.json", encoding="utf-8"))
+          voice = os.environ["VOICE"]
+          lang = os.environ["LANG_ID"]
+          num_step = int(os.environ["NUM_STEP"])
+          ref_wav = f"nwl_voices/{voice}_24kHz.wav"
+          if voice == "vi_male_nhat_phong":
+              ref_txt = "Xin kính chào quý bạn và các vị. Mong rằng giọng nói này sẽ phù hợp với bất kỳ dự án nào của bạn. Cảm ơn đã lựa chọn. Hãy thử ngay nhé!"
+          else:
+              txt_path = Path(f"nwl_voices/{voice}.txt")
+              ref_txt = txt_path.read_text(encoding="utf-8").strip() if txt_path.exists() else None
+
+          t0 = time.time()
+          model = OmniVoice.from_pretrained(
+              "k2-fsa/OmniVoice",
+              device_map="cpu",
+              dtype=torch.float32,
+              asr_device="cpu",
+          )
+          t_load = time.time() - t0
+          print(f"[OmniVoice] Loaded model in {t_load:.1f}s", flush=True)
+
+          t1 = time.time()
+          prompt = model.create_voice_clone_prompt(
+              ref_audio=ref_wav,
+              ref_text=ref_txt,
+          )
+          t_prompt = time.time() - t1
+          print(f"[OmniVoice] Built voice_clone_prompt in {t_prompt:.1f}s (ref_text_len={len(ref_txt or '')})", flush=True)
+
+          t2 = time.time()
+          per_chunk = []
+          for c in meta["chunks"]:
+              i = c["chunk_index"]
+              tc = time.time()
+              audio = model.generate(
+                  text=c["tts"],
+                  language=lang or None,
+                  voice_clone_prompt=prompt,
+                  speed=1.0,
+                  num_step=num_step,
+              )[0].astype(np.float32)
+              peak = float(np.max(np.abs(audio))) or 1.0
+              if peak > 0.99:
+                  audio = audio / peak * 0.99
+              sf.write(f"work/chunks/chunk_{i:02d}.wav", audio, SR, subtype="PCM_16")
+              dur = len(audio) / SR
+              dt = time.time() - tc
+              per_chunk.append({"i": i, "chars": len(c["tts"]), "audio_s": round(dur, 2), "gen_s": round(dt, 2)})
+              del audio
+              gc.collect()
+              print(f"[{i+1}/{meta['total_chunks']}] {len(c['tts'])} chars -> {dur:.2f}s audio in {dt:.1f}s", flush=True)
+
+          t_gen = time.time() - t2
+          total_audio_s = sum(x["audio_s"] for x in per_chunk)
+          tts_meta = {
+              "model": "k2-fsa/OmniVoice",
+              "device": "cpu",
+              "voice": voice,
+              "language": lang,
+              "speed": 1.0,
+              "num_step": num_step,
+              "chunks": len(per_chunk),
+              "chars": sum(x["chars"] for x in per_chunk),
+              "ref_audio": ref_wav,
+              "ref_text_used": getattr(prompt, "ref_text", ref_txt),
+              "speech_audio_s": round(total_audio_s, 2),
+              "load_s": round(t_load, 1),
+              "prompt_s": round(t_prompt, 1),
+              "generate_s": round(t_gen, 1),
+              "rtf": round(t_gen / total_audio_s, 3) if total_audio_s else None,
+              "per_chunk": per_chunk,
+          }
+          with open("work/tts_meta.json", "w", encoding="utf-8") as f:
+              json.dump(tts_meta, f, ensure_ascii=False, indent=2)
+          del prompt, model
+          gc.collect()
+          PY
+
+          echo "T_TTS=$(( $(date +%s) - T1 ))" >> "$GITHUB_ENV"
+          echo "TTS_PEAK_RSS_KB=$(awk -F': ' '/Maximum resident set size/{print $2}' work/tts_time.txt)" >> "$GITHUB_ENV"
+          echo "=== RAM sau khi tiến trình Python OmniVoice thoát hoàn toàn ==="
+          free -h
+
+      - name: Bước 3 — Ghép giọng chuẩn -14 LUFS (>=60s) & đóng gói HTML NW2 khớp mili-giây
+        run: |
+          python3 scripts/nw2_e2e_pipeline.py assemble-audio \
+            --chunks-json work/chunks.json \
+            --chunks-dir work/chunks \
+            --out-wav "out/${TASK_ID}__voice_24k.wav" \
+            --out-timings work/timings.json
+          python3 scripts/nw2_e2e_pipeline.py build-html \
+            --base-zip templates/nw2_template_offline_base.zip \
+            --timings-json work/timings.json \
+            --out-dir work/nw2_project
+
+      - name: Bước 4 — Dựng hình HyperFrames 1080x1920 @ 30fps
+        run: |
+          T0=$(date +%s)
+          npm install -g "hyperframes@${HYPERFRAMES_VERSION}" --no-fund --no-audit
+          hyperframes --version || true
+          hyperframes browser ensure
+          echo "T_HF_INSTALL=$(( $(date +%s) - T0 ))" >> "$GITHUB_ENV"
+
+          T1=$(date +%s)
+          DUR=$(python3 -c 'import json; print(json.load(open("work/timings.json"))["total_duration"])')
+          /usr/bin/time -v -o work/render_time.txt \
+            hyperframes render work/nw2_project \
+              -o work/raw_video.mp4 \
+              --fps 30 --start 0 --end "$DUR" \
+              --quality "$QUALITY" --resolution portrait \
+              --workers auto 2>&1 | tee work/render.log
+          echo "T_RENDER=$(( $(date +%s) - T1 ))" >> "$GITHUB_ENV"
+          echo "RENDER_PEAK_RSS_KB=$(awk -F': ' '/Maximum resident set size/{print $2}' work/render_time.txt)" >> "$GITHUB_ENV"
+
+      - name: Bước 5 — Ghép Broadcast MP4 (H.264 High@L4.2 + AAC 192k) & Kiểm định cổng QA
+        run: |
+          python3 scripts/nw2_e2e_pipeline.py mux-qa \
+            --raw-mp4 work/raw_video.mp4 \
+            --wav "out/${TASK_ID}__voice_24k.wav" \
+            --timings-json work/timings.json \
+            --out-mp4 "out/${TASK_ID}__reels.mp4" \
+            --out-frames-png "out/${TASK_ID}__frames.png" \
+            --out-qa "out/${TASK_ID}__qa.json" \
+            --out-report "out/${TASK_ID}__report.md"
+
+          T_TOTAL=$(( $(date +%s) - T_START ))
+          {
+            echo ""
+            echo "## Telemetry GitHub Actions Runner"
+            echo "| Hạng mục | Giá trị |"
+            echo "|---|---|"
+            echo "| Repo / Run | ${GITHUB_REPOSITORY} / [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) |"
+            echo "| Runner | $(nproc) vCPU, $(free -g | awk '/Mem:/{print $2}') GB RAM |"
+            echo "| Giọng OmniVoice | ${VOICE} (num_step=${NUM_STEP}) — ${T_TTS:-N/A}s, Peak RSS $(( ${TTS_PEAK_RSS_KB:-0} / 1024 )) MB |"
+            echo "| Dựng HyperFrames | ${HYPERFRAMES_VERSION} (quality=${QUALITY}) — ${T_RENDER:-N/A}s, Peak RSS $(( ${RENDER_PEAK_RSS_KB:-0} / 1024 )) MB |"
+            echo "| Tổng thời gian job | ${T_TOTAL}s |"
+          } >> "out/${TASK_ID}__report.md"
+          cat "out/${TASK_ID}__report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload GitHub Actions Artifact (14 ngày)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TASK_ID }}_${{ env.VIDEO_CODE }}
+          path: out/
+          retention-days: 14
+
+      - name: Bước 6 — Đẩy trọn bộ kết quả về RESULTS qua cổng ResultsUploader (B')
+        if: success() && env.UPLOAD == 'true'
+        env:
+          RESULTS_UPLOAD_URL: ${{ secrets.RESULTS_UPLOAD_URL }}
+          RESULTS_UPLOAD_SECRET: ${{ secrets.RESULTS_UPLOAD_SECRET }}
+        run: |
+          chmod +x scripts/gha_upload_to_results.sh
+          PFX="GHA_E2E_${GITHUB_RUN_ID}_${TASK_ID}_${VIDEO_CODE}"
+          scripts/gha_upload_to_results.sh "out/${TASK_ID}__reels.mp4"      video/mp4        "${PFX}_reels.mp4"
+          scripts/gha_upload_to_results.sh "out/${TASK_ID}__voice_24k.wav"  audio/wav        "${PFX}_voice_24k.wav"
+          scripts/gha_upload_to_results.sh "out/${TASK_ID}__frames.png"     image/png        "${PFX}_frames.png"
+          scripts/gha_upload_to_results.sh "out/${TASK_ID}__report.md"      text/markdown    "${PFX}_report.md"
+          scripts/gha_upload_to_results.sh "out/${TASK_ID}__qa.json"        application/json "${PFX}_qa.json"

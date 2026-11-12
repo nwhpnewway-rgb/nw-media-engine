@@ -1,0 +1,33 @@
+name: upload-smoke-test
+
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create small txt
+        run: |
+          mkdir -p out
+          {
+            echo "GHA smoke test -> ResultsUploader -> RESULTS"
+            echo "repo=${GITHUB_REPOSITORY} run_id=${GITHUB_RUN_ID} attempt=${GITHUB_RUN_ATTEMPT}"
+            echo "sha=${GITHUB_SHA}"
+            echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > "out/GHA_SMOKE_${GITHUB_RUN_ID}.txt"
+          cat "out/GHA_SMOKE_${GITHUB_RUN_ID}.txt"
+
+      - name: Upload to RESULTS
+        env:
+          RESULTS_UPLOAD_URL: ${{ secrets.RESULTS_UPLOAD_URL }}
+          RESULTS_UPLOAD_SECRET: ${{ secrets.RESULTS_UPLOAD_SECRET }}
+        run: |
+          bash scripts/gha_upload_to_results.sh "out/GHA_SMOKE_${GITHUB_RUN_ID}.txt" text/plain "GHA_SMOKE_${GITHUB_RUN_ID}.txt"

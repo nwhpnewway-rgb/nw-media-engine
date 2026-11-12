@@ -1,0 +1,259 @@
+name: hyperframes-render
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: "Task ID (vd MEDIA_20261113_01) - dùng làm tiền tố tên file"
+        required: true
+      video_code:
+        description: "Mã video V01..V24 (dùng khi đồng bộ với giọng đọc)"
+        required: false
+        default: "V01"
+      voice_run_id:
+        description: "Run ID của omnivoice-tts để ghép tiếng + đồng bộ Karaoke (vd 43184416292)"
+        required: false
+        default: ""
+      voice_file_id:
+        description: "Hoặc Drive file ID của file WAV công khai (nếu không dùng voice_run_id)"
+        required: false
+        default: ""
+      template_file_id:
+        description: "Drive file ID của template zip (để trống = dùng bản trong repo templates/)"
+        required: false
+        default: ""
+      project_dir:
+        description: "Thư mục project bên trong zip"
+        required: false
+        default: "nw"
+      start:
+        description: "Giây bắt đầu (tự ghi đè khi có voice)"
+        required: false
+        default: "0"
+      end:
+        description: "Giây kết thúc (tự ghi đè khi có voice)"
+        required: false
+        default: "24"
+      fps:
+        description: "FPS"
+        required: false
+        default: "30"
+      quality:
+        description: "draft | looks | delivery"
+        required: false
+        default: "looks"
+      upload_to_drive:
+        description: "Đẩy kết quả lên RESULTS qua ResultsUploader"
+        type: boolean
+        default: true
+  repository_dispatch:
+    types: [hyperframes-render]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: hyperframes-${{ github.event.inputs.task_id || github.event.client_payload.task_id }}
+  cancel-in-progress: false
+
+env:
+  TASK_ID: ${{ github.event.inputs.task_id || github.event.client_payload.task_id }}
+  VIDEO_CODE: ${{ github.event.inputs.video_code || github.event.client_payload.video_code || 'V01' }}
+  VOICE_RUN_ID: ${{ github.event.inputs.voice_run_id || github.event.client_payload.voice_run_id || '' }}
+  VOICE_FILE_ID: ${{ github.event.inputs.voice_file_id || github.event.client_payload.voice_file_id || '' }}
+  TEMPLATE_FILE_ID: ${{ github.event.inputs.template_file_id || github.event.client_payload.template_file_id || '' }}
+  PROJECT_DIR: ${{ github.event.inputs.project_dir || github.event.client_payload.project_dir || 'nw' }}
+  START: ${{ github.event.inputs.start || github.event.client_payload.start || '0' }}
+  END: ${{ github.event.inputs.end || github.event.client_payload.end || '24' }}
+  FPS: ${{ github.event.inputs.fps || github.event.client_payload.fps || '30' }}
+  QUALITY: ${{ github.event.inputs.quality || github.event.client_payload.quality || 'looks' }}
+  UPLOAD: ${{ github.event.inputs.upload_to_drive || github.event.client_payload.upload_to_drive || 'true' }}
+  HYPERFRAMES_VERSION: "0.9.37"
+  DO_NOT_TRACK: "1"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          [[ "$TASK_ID" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "::error::task_id không hợp lệ: '$TASK_ID'"; exit 1; }
+          echo "T_START=$(date +%s)" >> "$GITHUB_ENV"
+          nproc; free -h
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install system deps (ffmpeg)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg time >/dev/null
+          ffmpeg -version | head -1
+
+      - name: Cache HyperFrames browser
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/hyperframes
+            ~/.cache/puppeteer
+          key: hf-browser-${{ env.HYPERFRAMES_VERSION }}-${{ runner.os }}
+
+      - name: Install HyperFrames + browser
+        run: |
+          T0=$(date +%s)
+          npm install -g "hyperframes@${HYPERFRAMES_VERSION}" --no-fund --no-audit
+          hyperframes --version || true
+          hyperframes browser ensure
+          hyperframes browser path
+          echo "T_INSTALL=$(( $(date +%s) - T0 ))" >> "$GITHUB_ENV"
+
+      - name: Fetch template
+        run: |
+          mkdir -p work out
+          if [[ -n "$TEMPLATE_FILE_ID" ]]; then
+            bash scripts/drive.sh fetch "$TEMPLATE_FILE_ID" work/template.zip
+          else
+            cp templates/nw_video_template_offline_v1.zip work/template.zip
+          fi
+          echo "TEMPLATE_SHA256=$(sha256sum work/template.zip | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          unzip -q work/template.zip -d work/
+          test -f "work/${PROJECT_DIR}/index.html"
+
+      - name: Fetch voice & sync template timings (if voice provided)
+        if: env.VOICE_RUN_ID != '' || env.VOICE_FILE_ID != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ -n "$VOICE_RUN_ID" ]]; then
+            mkdir -p work/voice_art
+            gh run download "$VOICE_RUN_ID" -R "$GITHUB_REPOSITORY" -D work/voice_art
+            WAV=$(find work/voice_art -name '*__voice.wav' -o -name '*.wav' | head -n1)
+            META=$(find work/voice_art -name '*__tts_meta.json' | head -n1 || true)
+            [[ -n "$WAV" ]] || { echo "::error::Không tìm thấy file WAV trong run $VOICE_RUN_ID"; exit 1; }
+            cp "$WAV" work/voice.wav
+            [[ -n "$META" ]] && cp "$META" work/tts_meta.json || true
+          else
+            bash scripts/drive.sh fetch "$VOICE_FILE_ID" work/voice.wav
+          fi
+          ADUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 work/voice.wav)
+          META_ARG=()
+          [[ -f work/tts_meta.json ]] && META_ARG=(--tts-meta work/tts_meta.json)
+          SYNC_JSON=$(python3 scripts/sync_template_timing.py \
+            --html "work/${PROJECT_DIR}/index.html" \
+            --video-code "$VIDEO_CODE" \
+            --audio-duration "$ADUR" \
+            "${META_ARG[@]}")
+          echo "$SYNC_JSON" | tee "out/${TASK_ID}__sync.json"
+          NEW_START=$(python3 -c "import json,sys;print(json.loads(sys.argv[1])['start'])" "$SYNC_JSON")
+          NEW_END=$(python3 -c "import json,sys;print(json.loads(sys.argv[1])['end'])" "$SYNC_JSON")
+          {
+            echo "START=${NEW_START}"
+            echo "END=${NEW_END}"
+            echo "HAS_VOICE=true"
+          } >> "$GITHUB_ENV"
+
+      - name: Render & mux audio (if voice present)
+        run: |
+          T0=$(date +%s)
+          RENDER_OUT="out/${TASK_ID}__video.mp4"
+          if [[ "${HAS_VOICE:-false}" == "true" ]]; then
+            RENDER_OUT="work/silent.mp4"
+          fi
+          /usr/bin/time -v -o work/time.txt \
+            hyperframes render "work/${PROJECT_DIR}" \
+              -o "$RENDER_OUT" \
+              --fps "$FPS" --start "$START" --end "$END" \
+              --quality "$QUALITY" --resolution portrait \
+              --workers auto 2>&1 | tee work/render.log
+          echo "T_RENDER=$(( $(date +%s) - T0 ))" >> "$GITHUB_ENV"
+          echo "PEAK_RSS_KB=$(awk -F': ' '/Maximum resident set size/{print $2}' work/time.txt)" >> "$GITHUB_ENV"
+
+          if [[ "${HAS_VOICE:-false}" == "true" ]]; then
+            DUR=$(python3 -c "print(float('$END')-float('$START'))")
+            ffmpeg -hide_banner -y \
+              -i work/silent.mp4 -i work/voice.wav \
+              -map 0:v:0 -map 1:a:0 \
+              -c:v copy \
+              -af "apad" -t "$DUR" \
+              -c:a aac -b:a 192k -ar 48000 -ac 2 \
+              -movflags +faststart \
+              "out/${TASK_ID}__video.mp4"
+          fi
+
+      - name: QA gate (ffprobe + ebur128)
+        run: |
+          DUR=$(python3 -c "print(float('$END')-float('$START'))")
+          EXTRA_QA=()
+          [[ "${HAS_VOICE:-false}" == "true" ]] && EXTRA_QA=(--require-audio --lufs -14 --lufs-tol 1.5)
+          python3 scripts/qa.py video "out/${TASK_ID}__video.mp4" \
+            --width 1080 --height 1920 --fps "$FPS" --duration "$DUR" \
+            "${EXTRA_QA[@]}" --out "out/${TASK_ID}__qa.json"
+
+      - name: Write report
+        if: always()
+        run: |
+          mkdir -p out
+          T_TOTAL=$(( $(date +%s) - T_START ))
+          QA_PASS=$(python3 -c "import json;print(json.load(open('out/${TASK_ID}__qa.json'))['pass'])" 2>/dev/null || echo "N/A")
+          {
+            echo "# ${TASK_ID} — HyperFrames render (GitHub Actions)"
+            echo
+            echo "| Hạng mục | Giá trị |"
+            echo "|---|---|"
+            echo "| Repo / run | ${GITHUB_REPOSITORY} / [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) |"
+            echo "| Runner | $(nproc) vCPU, $(free -g | awk '/Mem:/{print $2}') GB RAM, $(lsb_release -ds) |"
+            echo "| HyperFrames | ${HYPERFRAMES_VERSION} |"
+            echo "| Template sha256 | \`${TEMPLATE_SHA256:-N/A}\` |"
+            echo "| Video / Đoạn | ${VIDEO_CODE} · ${START}s → ${END}s @ ${FPS}fps, quality=${QUALITY} |"
+            echo "| Ghép tiếng (AAC 192k) | ${HAS_VOICE:-false} (voice_run=${VOICE_RUN_ID:-none}) |"
+            echo "| Cài đặt (npm + browser) | ${T_INSTALL:-N/A} s |"
+            echo "| Dựng (render) | ${T_RENDER:-N/A} s |"
+            echo "| Peak RSS (render) | $(( ${PEAK_RSS_KB:-0} / 1024 )) MB |"
+            echo "| Tổng job đến bước báo cáo | ${T_TOTAL} s |"
+            echo "| QA | ${QA_PASS} |"
+            echo
+            if [[ -f "out/${TASK_ID}__sync.json" ]]; then
+              echo "## Đồng bộ Slide & Karaoke"
+              echo '```json'
+              cat "out/${TASK_ID}__sync.json"
+              echo '```'
+            fi
+            echo "## QA chi tiết"
+            echo '```json'
+            cat "out/${TASK_ID}__qa.json" 2>/dev/null || echo "{}"
+            echo '```'
+          } > "out/${TASK_ID}__media_report.md"
+          cat "out/${TASK_ID}__media_report.md" >> "$GITHUB_STEP_SUMMARY"
+          cp work/render.log "out/${TASK_ID}__render.log" 2>/dev/null || true
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TASK_ID }}
+          path: out/
+          retention-days: 14
+
+      - name: Push to RESULTS (ResultsUploader)
+        if: success() && env.UPLOAD == 'true'
+        env:
+          RESULTS_UPLOAD_URL: ${{ secrets.RESULTS_UPLOAD_URL }}
+          RESULTS_UPLOAD_SECRET: ${{ secrets.RESULTS_UPLOAD_SECRET }}
+        run: |
+          P="GHA_HF_${GITHUB_RUN_ID}_${TASK_ID}"
+          U=scripts/gha_upload_to_results.sh
+          bash $U "out/${TASK_ID}__video.mp4"        video/mp4        "${P}_video.mp4"
+          bash $U "out/${TASK_ID}__media_report.md"  text/markdown    "${P}_media_report.md"
+          bash $U "out/${TASK_ID}__qa.json"          application/json "${P}_qa.json"
+          if [[ -f "out/${TASK_ID}__sync.json" ]]; then
+            bash $U "out/${TASK_ID}__sync.json"      application/json "${P}_sync.json"
+          fi

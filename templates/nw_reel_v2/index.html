@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080, height=1920, initial-scale=1.0" />
+  <title>NEWWAY Logistics — Reel v2 (data-driven)</title>
+  <link rel="stylesheet" href="assets/fonts/fonts.css" />
+  <script src="assets/vendor_gsap.min.js"></script>
+  <style>
+    :root {
+      --orange: #ff6b1a; --orange-bright: #ff8c42; --amber: #fbbf24;
+      --emerald: #10b981; --emerald-bright: #34d399; --sky: #38bdf8; --rose: #fb7185;
+      --ink: #f8fafc; --ink-dim: #cbd5e1; --ink-mute: #94a3b8;
+      --card: rgba(8, 20, 33, 0.78); --card-strong: rgba(6, 15, 26, 0.9);
+      --line: rgba(148, 163, 184, 0.22);
+      --font-sans: 'Be Vietnam Pro', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1080px; height: 1920px; background: #03070b; overflow: hidden; }
+    body { font-family: var(--font-sans); color: var(--ink); -webkit-font-smoothing: antialiased; }
+    #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #050d14; }
+
+    /* ---------- Background: logistics photos with Ken Burns ---------- */
+    .bg { position: absolute; inset: -60px; opacity: 0; will-change: transform, opacity; }
+    .bg img { width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(1.05) contrast(1.05); }
+    .shade { position: absolute; inset: 0; pointer-events: none; z-index: 2;
+      background:
+        linear-gradient(180deg, rgba(3,9,15,0.82) 0%, rgba(3,9,15,0.38) 22%, rgba(3,9,15,0.45) 55%, rgba(3,9,15,0.92) 80%, rgba(3,9,15,0.97) 100%),
+        radial-gradient(ellipse at 80% 0%, rgba(255,107,26,0.22), transparent 55%); }
+    .grain { position: absolute; inset: 0; z-index: 3; pointer-events: none; opacity: .5;
+      background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 64px 64px; }
+
+    /* ---------- Header ---------- */
+    .header { position: absolute; top: 64px; left: 64px; right: 64px; height: 72px; z-index: 20;
+      display: flex; align-items: center; justify-content: space-between; }
+    .header img { height: 60px; width: auto; }
+    .header-right { display: flex; gap: 14px; align-items: center; }
+    .pill { font-family: var(--font-mono); font-weight: 700; font-size: 22px; letter-spacing: .04em;
+      padding: 10px 18px; border-radius: 999px; background: rgba(6,15,26,.72); border: 1px solid var(--line); color: var(--ink-dim); }
+    .pill .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--orange); margin-right: 10px; vertical-align: middle; }
+    .pill.counter { color: var(--emerald-bright); border-color: rgba(52,211,153,.4); }
+
+    /* ---------- Slides ---------- */
+    .slide { position: absolute; left: 64px; right: 64px; top: 200px; height: 1300px; z-index: 10;
+      display: flex; flex-direction: column; justify-content: center; gap: 30px; opacity: 0; }
+    .slide.top { justify-content: flex-start; padding-top: 40px; }
+    .kicker { align-self: flex-start; font-family: var(--font-mono); font-weight: 700; font-size: 26px; letter-spacing: .08em;
+      text-transform: uppercase; color: #ffd8be; padding: 12px 22px; border-radius: 999px;
+      background: rgba(255,107,26,.18); border: 1.5px solid rgba(255,107,26,.55); }
+    .headline { font-weight: 900; font-size: 96px; line-height: 1.04; letter-spacing: -.02em; text-shadow: 0 6px 30px rgba(0,0,0,.55); }
+    .headline.md { font-size: 78px; }
+    .hl { background: linear-gradient(90deg, var(--orange-bright) 0%, var(--orange) 45%, var(--amber) 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+    .sub { font-weight: 600; font-size: 40px; line-height: 1.35; color: var(--ink-dim); text-shadow: 0 3px 16px rgba(0,0,0,.6); }
+    .chips { display: flex; flex-wrap: wrap; gap: 18px; }
+    .chip { display: flex; align-items: center; gap: 14px; font-weight: 800; font-size: 40px; padding: 18px 28px; border-radius: 22px;
+      background: var(--card); border: 1.5px solid var(--line); backdrop-filter: blur(10px); }
+    .trend { font-family: var(--font-mono); font-weight: 700; font-size: 30px; padding: 6px 14px; border-radius: 12px; }
+    .trend.flat { color: var(--sky); background: rgba(56,189,248,.14); }
+    .trend.up { color: var(--rose); background: rgba(251,113,133,.16); }
+    .trend.down { color: var(--emerald-bright); background: rgba(52,211,153,.16); }
+
+    .card { background: var(--card); border: 1.5px solid var(--line); border-radius: 30px; padding: 34px 38px; backdrop-filter: blur(14px);
+      box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+    .badge-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .badge-label { font-family: var(--font-mono); font-size: 26px; color: var(--ink-mute); letter-spacing: .06em; text-transform: uppercase; }
+    .badge-value { font-weight: 900; font-size: 52px; color: var(--sky); }
+    .bullets { display: flex; flex-direction: column; gap: 22px; }
+    .bullet { display: flex; gap: 24px; align-items: flex-start; font-weight: 700; font-size: 40px; line-height: 1.32; }
+    .bullet .ico { flex: 0 0 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; font-size: 34px;
+      background: rgba(255,107,26,.16); border: 1.5px solid rgba(255,107,26,.45); }
+    .bullet small { display: block; font-weight: 500; font-size: 30px; color: var(--ink-mute); margin-top: 6px; }
+
+    /* price table */
+    .ptable { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+    .ptable .phead { display: flex; justify-content: space-between; align-items: baseline; padding: 26px 34px;
+      background: linear-gradient(90deg, rgba(255,107,26,.25), rgba(255,107,26,.05)); border-bottom: 1.5px solid var(--line); }
+    .ptable .phead b { font-weight: 800; font-size: 34px; }
+    .ptable .phead span { font-family: var(--font-mono); font-size: 24px; color: var(--ink-mute); }
+    .prow { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 22px; padding: 26px 34px; border-bottom: 1px solid var(--line); }
+    .prow:last-child { border-bottom: 0; }
+    .prow .pname { font-weight: 800; font-size: 40px; line-height: 1.15; }
+    .prow .pname small { display: block; font-weight: 600; font-size: 26px; color: var(--ink-mute); margin-top: 4px; }
+    .prow .pval { font-family: var(--font-mono); font-weight: 700; font-size: 40px; color: #fff; white-space: nowrap; }
+    .prow.lit { background: rgba(255,107,26,.12); }
+
+    /* stats */
+    .stats { display: flex; flex-direction: column; gap: 24px; }
+    .stat { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 20px; }
+    .stat .slabel { font-weight: 800; font-size: 44px; }
+    .stat .slabel small { display: block; font-family: var(--font-mono); font-weight: 600; font-size: 24px; color: var(--ink-mute); margin-top: 6px; }
+    .stat .sval { text-align: right; }
+    .stat .sval b { font-family: var(--font-mono); font-weight: 700; font-size: 84px; line-height: 1; }
+    .stat .sval i { font-style: normal; display: block; font-family: var(--font-mono); font-size: 26px; color: var(--ink-mute); }
+    .stat .delta { font-family: var(--font-mono); font-weight: 700; font-size: 34px; padding: 8px 16px; border-radius: 14px; margin-left: 18px; }
+
+    /* steps */
+    .steps { display: grid; grid-template-columns: 1fr; gap: 18px; }
+    .step { display: flex; align-items: center; gap: 26px; font-weight: 800; font-size: 42px; padding: 26px 32px; }
+    .step .num { flex: 0 0 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-mono);
+      font-size: 34px; background: rgba(16,185,129,.18); border: 2px solid rgba(52,211,153,.6); color: var(--emerald-bright); }
+    .step small { display: block; font-weight: 500; font-size: 28px; color: var(--ink-mute); margin-top: 4px; }
+    .step.lit { border-color: rgba(52,211,153,.75); background: rgba(6,40,30,.72); }
+
+    /* cta */
+    .cta { align-items: center; text-align: center; }
+    .cta .card { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 26px; padding: 56px 40px; }
+    .cta img { height: 104px; width: auto; }
+    .cta .handle { font-family: var(--font-mono); font-weight: 700; font-size: 46px; color: var(--orange-bright); }
+    .cta .tag { font-weight: 600; font-size: 32px; color: var(--ink-dim); line-height: 1.4; }
+    .follow { font-weight: 800; font-size: 40px; padding: 20px 56px; border-radius: 999px; background: var(--orange); color: #fff; }
+    .follow.on { background: var(--emerald); }
+    .note { font-size: 26px; color: var(--ink-mute); line-height: 1.45; }
+
+    /* ---------- Karaoke + progress ---------- */
+    .karaoke { position: absolute; left: 56px; right: 56px; bottom: 170px; min-height: 210px; z-index: 30;
+      display: flex; align-items: center; justify-content: center; text-align: center; padding: 30px 40px;
+      background: rgba(4,11,19,.86); border: 1.5px solid rgba(255,255,255,.12); border-radius: 30px; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+    .karaoke p { font-weight: 800; font-size: 46px; line-height: 1.4; color: rgba(248,250,252,.55); }
+    .k-word { display: inline; transition: none; }
+    .k-word.passed { color: #fff; }
+    .k-word.active { color: #fff; background: linear-gradient(transparent 62%, rgba(255,107,26,.85) 62%); border-radius: 4px; }
+    .progress { position: absolute; left: 56px; right: 56px; bottom: 128px; height: 10px; border-radius: 99px; background: rgba(255,255,255,.12); z-index: 30; overflow: hidden; }
+    .progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--orange), var(--amber), var(--emerald-bright)); }
+    .source { position: absolute; left: 56px; right: 56px; bottom: 60px; z-index: 30; font-family: var(--font-mono); font-size: 21px; color: rgba(203,213,225,.7);
+      text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="__DURATION__" data-width="1080" data-height="1920">
+    <div id="bgs"></div>
+    <div class="shade"></div>
+    <div class="grain"></div>
+    <div class="header">
+      <img src="assets/logo-dark.png" alt="NEWWAY" />
+      <div class="header-right">
+        <span class="pill"><span class="dot"></span><span id="handle">newwaylogisticsjsc</span></span>
+        <span class="pill counter" id="counter">SLIDE 01 / 08</span>
+      </div>
+    </div>
+    <div id="slides"></div>
+    <div class="karaoke"><p id="kara"></p></div>
+    <div class="progress"><i id="prog"></i></div>
+    <div class="source" id="source"></div>
+  </div>
+
+  <script src="reel-data.js"></script>
+  <script>
+  (function () {
+    const R = window.__REEL;
+    const spec = R.spec, T = R.timings;
+    const TOTAL = T.total_s;
+    const N = spec.slides.length;
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const trendTxt = { flat: '→ đi ngang', up: '▲ tăng', down: '▼ giảm' };
+    const trendBadge = (t, label) => t ? `<span class="trend ${t}">${esc(label || trendTxt[t] || t)}</span>` : '';
+
+    document.getElementById('handle').textContent = spec.handle || 'newwaylogisticsjsc';
+    document.getElementById('source').textContent = spec.source_note || '';
+
+    // ---------- build backgrounds ----------
+    const bgWrap = document.getElementById('bgs');
+    const bgEls = spec.slides.map((s, i) => {
+      const d = document.createElement('div');
+      d.className = 'bg';
+      d.innerHTML = `<img src="assets/bg/${esc(s.bg)}.jpg" alt="" />`;
+      bgWrap.appendChild(d);
+      return d;
+    });
+
+    // ---------- slide renderers ----------
+    const R_ = {
+      hero: (s) => `
+        <div class="kicker">${esc(s.kicker)}</div>
+        <div class="headline">${esc(s.headline)}<br><span class="hl">${esc(s.highlight)}</span></div>
+        ${s.sub ? `<div class="sub">${esc(s.sub)}</div>` : ''}
+        <div class="chips">${(s.chips || []).map((c) => `<div class="chip">${esc(c.name)} ${trendBadge(c.trend, c.label)}</div>`).join('')}</div>`,
+      bullets: (s) => `
+        <div class="kicker">${esc(s.kicker)}</div>
+        <div class="headline md">${esc(s.headline)}${s.highlight ? ` <span class="hl">${esc(s.highlight)}</span>` : ''}</div>
+        ${s.badge ? `<div class="card badge-row"><span class="badge-label">${esc(s.badge.label)}</span><span class="badge-value">${esc(s.badge.value)}</span></div>` : ''}
+        <div class="card bullets">${(s.bullets || []).map((b) => `<div class="bullet"><span class="ico">${esc(b.icon || '•')}</span><div>${esc(b.text)}${b.note ? `<small>${esc(b.note)}</small>` : ''}</div></div>`).join('')}</div>`,
+      price_table: (s) => `
+        <div class="kicker">${esc(s.kicker)}</div>
+        <div class="headline md">${esc(s.headline)}${s.highlight ? ` <span class="hl">${esc(s.highlight)}</span>` : ''}</div>
+        <div class="card ptable">
+          <div class="phead"><b>${esc(s.table_title || 'Bảng giá')}</b><span>${esc(s.unit || '')}</span></div>
+          ${(s.rows || []).map((r) => `<div class="prow" data-part="${r.part ?? ''}"><div class="pname">${esc(r.name)}${r.note ? `<small>${esc(r.note)}</small>` : ''}</div><div class="pval">${esc(r.price)}</div>${trendBadge(r.trend, r.label)}</div>`).join('')}
+        </div>`,
+      stats: (s) => `
+        <div class="kicker">${esc(s.kicker)}</div>
+        <div class="headline md">${esc(s.headline)}${s.highlight ? ` <span class="hl">${esc(s.highlight)}</span>` : ''}</div>
+        <div class="stats">${(s.stats || []).map((x) => `
+          <div class="card stat"><div class="slabel">${esc(x.label)}<small>${esc(x.note || '')}</small></div>
+            <div class="sval"><b>${esc(x.value)}</b><i>${esc(x.unit || '')}${x.delta ? ` <span class="delta trend ${x.dir || 'flat'}">${esc(x.delta)}</span>` : ''}</i></div></div>`).join('')}</div>`,
+      steps: (s) => `
+        <div class="kicker">${esc(s.kicker)}</div>
+        <div class="headline md">${esc(s.headline)}${s.highlight ? ` <span class="hl">${esc(s.highlight)}</span>` : ''}</div>
+        <div class="steps">${(s.steps || []).map((x, i) => `<div class="card step" data-step="${i}"><span class="num">${String(i + 1).padStart(2, '0')}</span><div>${esc(x.title)}${x.note ? `<small>${esc(x.note)}</small>` : ''}</div></div>`).join('')}</div>`,
+      cta: (s) => `
+        <div class="card">
+          <img src="assets/logo-dark.png" alt="NEWWAY" />
+          <div class="handle">${esc(spec.handle || 'newwaylogisticsjsc')}</div>
+          <div class="tag">${esc(s.tagline || '')}</div>
+          <div class="follow" id="follow">Follow +</div>
+          ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
+        </div>`,
+    };
+
+    const slideWrap = document.getElementById('slides');
+    const slideEls = spec.slides.map((s, i) => {
+      const el = document.createElement('section');
+      el.className = 'slide' + (s.type === 'cta' ? ' cta' : '') + (s.align === 'top' ? ' top' : '');
+      el.innerHTML = (R_[s.type] || R_.bullets)(s);
+      slideWrap.appendChild(el);
+      return el;
+    });
+
+    // ---------- karaoke ----------
+    const kara = document.getElementById('kara');
+    const prog = document.getElementById('prog');
+    const counter = document.getElementById('counter');
+    let kKey = '';
+    function karaokeAt(t) {
+      let part = null;
+      for (const sl of T.slides) for (const p of sl.parts) if (t >= p.start_s && t < p.end_s) part = p;
+      if (!part) { // in lead-in or tail: show nearest
+        const all = T.slides.flatMap((s) => s.parts);
+        part = t < all[0].start_s ? all[0] : all[all.length - 1];
+      }
+      const key = part.start_s + '';
+      const words = part.display.split(/\s+/).filter(Boolean);
+      if (key !== kKey) {
+        kKey = key;
+        kara.innerHTML = words.map((w) => `<span class="k-word">${esc(w)}</span>`).join(' ');
+      }
+      // weight words by length so long words take longer
+      const w = words.map((x) => Math.max(2, x.replace(/[^\p{L}\p{N}]/gu, '').length + 1));
+      const tot = w.reduce((a, b) => a + b, 0);
+      const sp = Math.max(0.001, part.speech_end_s - part.start_s);
+      const prog01 = Math.min(1, Math.max(0, (t - part.start_s) / sp));
+      let acc = 0, active = words.length - 1;
+      for (let i = 0; i < w.length; i++) { acc += w[i] / tot; if (prog01 < acc) { active = i; break; } }
+      if (t >= part.speech_end_s) active = words.length;
+      const spans = kara.children;
+      for (let i = 0; i < spans.length; i++) {
+        spans[i].className = 'k-word' + (i < active ? ' passed' : i === active ? ' active' : '');
+      }
+    }
+
+    function slideIndexAt(t) {
+      let idx = 0;
+      T.slides.forEach((s, i) => { if (t >= s.start_s) idx = i; });
+      return idx;
+    }
+
+    function sync(t) {
+      const i = slideIndexAt(t);
+      counter.textContent = `SLIDE ${String(i + 1).padStart(2, '0')} / ${String(N).padStart(2, '0')}`;
+      prog.style.width = (Math.min(1, t / TOTAL) * 100).toFixed(2) + '%';
+      karaokeAt(t);
+      const s = T.slides[i], el = slideEls[i];
+      // highlight rows / steps progressively within a slide
+      const local = (t - s.start_s) / Math.max(0.001, s.end_s - s.start_s);
+      el.querySelectorAll('.step').forEach((c, k, arr) => c.classList.toggle('lit', Math.floor(local * arr.length) === k));
+      const curPart = s.parts.findIndex((p) => t >= p.start_s && t < p.end_s);
+      el.querySelectorAll('.prow').forEach((r) => r.classList.toggle('lit', r.dataset.part !== '' && Number(r.dataset.part) === curPart + 1));
+      const f = document.getElementById('follow');
+      if (f && i === N - 1) { const on = local > 0.6; f.textContent = on ? 'Following ✓' : 'Follow +'; f.classList.toggle('on', on); }
+    }
+
+    // ---------- timeline ----------
+    const tl = gsap.timeline({ paused: true, onUpdate: function () { sync(this.time()); } });
+    const XF = 0.45; // crossfade
+    T.slides.forEach((s, i) => {
+      const st = s.start_s, en = s.end_s, dur = en - st;
+      const bg = bgEls[i], el = slideEls[i];
+      const dir = i % 2 ? -1 : 1;
+      // background: fade in, slow zoom + pan for the whole span
+      tl.fromTo(bg, { opacity: i === 0 ? 1 : 0 }, { opacity: 1, duration: i === 0 ? 0.001 : XF, ease: 'none' }, Math.max(0, st - XF / 2));
+      tl.fromTo(bg, { scale: 1.02, xPercent: -1.5 * dir, yPercent: 1 }, { scale: 1.13, xPercent: 1.5 * dir, yPercent: -1.5, duration: dur + XF, ease: 'none' }, Math.max(0, st - XF / 2));
+      if (i < N - 1) tl.to(bg, { opacity: 0, duration: XF, ease: 'none' }, en - XF / 2 + 0.05);
+      // slide content: in / out
+      tl.set(el, { opacity: 1 }, st);
+      tl.fromTo(el.children, { y: 36, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, stagger: 0.08, ease: 'power2.out' }, st + 0.02);
+      const inner = el.querySelectorAll('.chip, .bullet, .prow, .stat, .step');
+      if (inner.length) tl.fromTo(inner, { x: 40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.42, stagger: 0.12, ease: 'power2.out' }, st + 0.3);
+      if (i < N - 1) tl.to(el, { opacity: 0, duration: 0.25, ease: 'none' }, en - 0.25);
+    });
+    tl.set({}, {}, TOTAL);
+    window.__timelines = window.__timelines || {};
+    window.__timelines['main'] = tl;
+    tl.seek(0); sync(0);
+
+    if (!navigator.webdriver && location.search.includes('play')) { tl.play(0); }
+    const m = location.search.match(/[?&]t=([\d.]+)/);
+    if (m) { tl.seek(parseFloat(m[1])); sync(parseFloat(m[1])); }
+  })();
+  </script>
+</body>
+</html>

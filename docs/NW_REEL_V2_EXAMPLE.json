@@ -1,0 +1,149 @@
+{
+  "schema": "nw-reel-v2",
+  "reel_id": "GIA_PHAN_BON_20261112",
+  "title": "Bản tin Giá phân bón tuần 12/11/2026",
+  "handle": "newwaylogisticsjsc",
+  "voice": "vi_male_nhat_phong",
+  "source_note": "Nguồn: AgroMonitor 11–12/11 · Bảng giá đại lý 12/11 · World Bank Pink Sheet T10/2026 · Giá tham khảo",
+  "sources": [
+    {"name": "AgroMonitor – Thị trường Phân bón ngày 11 & 12/11/2026", "url": "https://thitruongphanbon.com/"},
+    {"name": "Bảng giá phân bón hôm nay 12/11/2026 (Tây Nam Bộ)", "url": "https://banggianongsan.com/bang-gia-phan-bon-hom-nay/"},
+    {"name": "World Bank Pink Sheet qua phanbon.ai.vn (giá thế giới tháng 10/2026)", "url": "https://phanbon.ai.vn/gia-phan-bon"}
+  ],
+  "slides": [
+    {
+      "type": "hero", "bg": "port_aerial",
+      "kicker": "Bản tin tuần · 12/11/2026",
+      "headline": "Giá phân bón tuần này:",
+      "highlight": "trầm lắng, giá chững",
+      "sub": "Điểm nhanh Urê · DAP · Kali · NPK cùng NEWWAY Logistics",
+      "chips": [
+        {"name": "Urê", "trend": "flat"},
+        {"name": "DAP", "trend": "up", "label": "▲ nhập khẩu khan"},
+        {"name": "Kali", "trend": "flat"},
+        {"name": "NPK", "trend": "flat"}
+      ],
+      "parts": [
+        {"display": "Giá phân bón tuần này: thị trường trầm lắng, giá chững lại.",
+         "tts": "Giá phân bón tuần này: thị trường trầm lắng, giá chững lại."},
+        {"display": "NEWWAY Logistics điểm nhanh giá Urê, DAP, Kali và NPK ngày 12/11.",
+         "tts": "New Way Logistics điểm nhanh giá U rê, Đê A Pê, Ka li và Nờ Pê Ka, ngày mười hai tháng mười một."}
+      ]
+    },
+    {
+      "type": "bullets", "bg": "fertilizer_granules",
+      "kicker": "Diễn biến thị trường",
+      "headline": "Giao dịch",
+      "highlight": "chưa sôi động",
+      "badge": {"label": "Urê tại kho trung chuyển", "value": "Không đổi"},
+      "bullets": [
+        {"icon": "≡", "text": "Urê Cà Mau, Phú Mỹ giữ giá tại kho trung chuyển", "note": "AgroMonitor, 12/11/2026"},
+        {"icon": "↗", "text": "Nhu cầu nhích dần ở ĐBSCL cho lúa Đông Xuân", "note": "Miền Bắc: rau màu vụ Đông"}
+      ],
+      "parts": [
+        {"display": "Theo AgroMonitor, giá Urê Cà Mau và Phú Mỹ tại kho trung chuyển không đổi.",
+         "tts": "Theo Ác rô Mo ni tơ, giá U rê Cà Mau và Phú Mỹ tại kho trung chuyển không đổi."},
+        {"display": "Nhu cầu đã nhích ở Đồng bằng sông Cửu Long cho lúa Đông Xuân, nhưng chưa cải thiện mạnh.",
+         "tts": "Nhu cầu đã nhích ở Đồng bằng sông Cửu Long cho lúa Đông Xuân, nhưng chưa cải thiện mạnh."}
+      ]
+    },
+    {
+      "type": "price_table", "bg": "bulk_deck_bags",
+      "kicker": "Giá Urê · Tây Nam Bộ",
+      "headline": "Urê",
+      "highlight": "đi ngang",
+      "table_title": "Đại lý Tây Nam Bộ · 12/11",
+      "unit": "đồng / bao 50 kg",
+      "rows": [
+        {"name": "Urê Cà Mau", "price": "620–640K", "trend": "flat", "label": "→", "part": 1},
+        {"name": "Urê Phú Mỹ", "price": "610–630K", "trend": "flat", "label": "→", "part": 2}
+      ],
+      "parts": [
+        {"display": "Urê Cà Mau tại Tây Nam Bộ: 620 đến 640 nghìn đồng mỗi bao 50 ký.",
+         "tts": "U rê Cà Mau tại Tây Nam Bộ: sáu trăm hai mươi đến sáu trăm bốn mươi nghìn đồng mỗi bao năm mươi ký."},
+        {"display": "Urê Phú Mỹ: 610 đến 630 nghìn đồng mỗi bao, đi ngang so với tuần trước.",
+         "tts": "U rê Phú Mỹ: sáu trăm mười đến sáu trăm ba mươi nghìn đồng mỗi bao, đi ngang so với tuần trước."}
+      ]
+    },
+    {
+      "type": "price_table", "bg": "container_terminal",
+      "kicker": "DAP · Kali · NPK",
+      "headline": "DAP nhập khẩu",
+      "highlight": "khan hàng",
+      "table_title": "Đại lý Tây Nam Bộ · 12/11",
+      "unit": "đồng / bao 50 kg",
+      "rows": [
+        {"name": "DAP Hồng Hà", "price": "1,25–1,30tr", "trend": "up", "label": "dao động rộng", "part": 1},
+        {"name": "Kali miểng Cà Mau", "price": "500–530K", "trend": "flat", "label": "→", "part": 2},
+        {"name": "NPK 20-20-15", "note": "Ba Con Cò", "price": "870–900K", "trend": "flat", "label": "→", "part": 2}
+      ],
+      "parts": [
+        {"display": "DAP Hồng Hà giữ mức 1,25 đến 1,3 triệu đồng mỗi bao; DAP nhập khẩu khan, chào giá dao động rộng.",
+         "tts": "Đê A Pê Hồng Hà giữ mức một triệu hai trăm năm mươi nghìn đến một triệu ba trăm nghìn đồng mỗi bao. Hàng nhập khẩu khan, chào giá dao động rộng."},
+        {"display": "Kali miểng Cà Mau 500 đến 530 nghìn; NPK 20-20-15 Ba Con Cò 870 đến 900 nghìn đồng mỗi bao.",
+         "tts": "Ka li miểng Cà Mau năm trăm đến năm trăm ba mươi nghìn. Nờ Pê Ka hai mươi, hai mươi, mười lăm Ba Con Cò, tám trăm bảy mươi đến chín trăm nghìn đồng mỗi bao."}
+      ]
+    },
+    {
+      "type": "stats", "bg": "ship_unloading_crane",
+      "kicker": "Giá thế giới · World Bank T10/2026",
+      "headline": "Urê thế giới",
+      "highlight": "nhích tăng",
+      "stats": [
+        {"label": "Urê", "note": "so với tháng 9", "value": "420", "unit": "USD/tấn", "delta": "▲ 3,1%", "dir": "up"},
+        {"label": "DAP", "note": "so với tháng 9", "value": "803", "unit": "USD/tấn", "delta": "▲ 0,3%", "dir": "up"},
+        {"label": "Kali clorua", "note": "so với tháng 9", "value": "357,5", "unit": "USD/tấn", "delta": "▼ 2,7%", "dir": "down"}
+      ],
+      "parts": [
+        {"display": "Ngân hàng Thế giới: giá Urê tháng 10 đạt 420 USD một tấn, tăng 3,1% so với tháng trước.",
+         "tts": "Theo Ngân hàng Thế giới, giá U rê tháng mười đạt bốn trăm hai mươi đô la Mỹ một tấn, tăng ba phẩy một phần trăm so với tháng trước."},
+        {"display": "DAP 803 USD một tấn, nhích 0,3%; Kali clorua giảm 2,7%, còn 357,5 USD.",
+         "tts": "Đê A Pê tám trăm lẻ ba đô la một tấn, nhích không phẩy ba phần trăm. Ka li clo rua giảm hai phẩy bảy phần trăm, còn ba trăm năm mươi bảy phẩy năm đô la."}
+      ]
+    },
+    {
+      "type": "bullets", "bg": "barges_river",
+      "kicker": "Nguồn cung cần theo dõi",
+      "headline": "Rủi ro",
+      "highlight": "nguồn cung",
+      "bullets": [
+        {"icon": "⚠", "text": "Kali Nga, Belarus: tắc nghẽn đường sắt ra cảng Baltic", "note": "Nguy cơ gián đoạn giao hàng"},
+        {"icon": "✓", "text": "Trung Quốc mở hạn ngạch xuất khẩu SA đợt 2", "note": "Khoảng 1,3–2 triệu tấn"}
+      ],
+      "parts": [
+        {"display": "Kali từ Nga và Belarus có rủi ro gián đoạn do tắc nghẽn đường sắt ra cảng Baltic.",
+         "tts": "Ka li từ Nga và Bê la rút có rủi ro gián đoạn, do tắc nghẽn đường sắt ra các cảng Ban tích."},
+        {"display": "Trung Quốc công bố hạn ngạch xuất khẩu SA đợt 2, khoảng 1,3 đến 2 triệu tấn, giúp giảm căng nguồn cung.",
+         "tts": "Trung Quốc công bố hạn ngạch xuất khẩu phân Ét A đợt hai, khoảng một phẩy ba đến hai triệu tấn, giúp giảm căng nguồn cung."}
+      ]
+    },
+    {
+      "type": "steps", "bg": "barge_tug",
+      "kicker": "Kế hoạch tập kết Đông Xuân",
+      "headline": "Giải pháp",
+      "highlight": "NEWWAY",
+      "steps": [
+        {"title": "Tập kết sớm 3–4 tuần", "note": "Trước cao điểm tháng 11–12"},
+        {"title": "Sà lan + đầu kéo phủ bạt", "note": "Từ cảng về kho đại lý"},
+        {"title": "Kho khô, kê pallet chống ẩm", "note": "Không vón cục, đúng vụ"}
+      ],
+      "parts": [
+        {"display": "Cao điểm Đông Xuân tháng 11 và 12, nhà phân phối nên tập kết hàng sớm 3 đến 4 tuần.",
+         "tts": "Cao điểm Đông Xuân rơi vào tháng mười một và mười hai, nhà phân phối nên tập kết hàng sớm ba đến bốn tuần."},
+        {"display": "NEWWAY kết hợp sà lan, đầu kéo phủ bạt và kho khô, giao phân bón đúng vụ, không vón cục.",
+         "tts": "New Way kết hợp sà lan, đầu kéo phủ bạt và kho khô, giao phân bón đúng vụ, không vón cục."}
+      ]
+    },
+    {
+      "type": "cta", "bg": "port_cranes_sunset",
+      "tagline": "Bản tin giá phân bón mỗi tuần · Vận tải đa phương thức Phân bón · TACN · Hóa chất",
+      "note": "Giá chỉ mang tính tham khảo, thay đổi theo vùng và đại lý.",
+      "parts": [
+        {"display": "Giá chỉ mang tính tham khảo, thay đổi theo vùng và đại lý.",
+         "tts": "Giá chỉ mang tính tham khảo, thay đổi theo vùng và đại lý."},
+        {"display": "Theo dõi newwaylogisticsjsc để nhận bản tin giá phân bón mỗi tuần!",
+         "tts": "Theo dõi New Way Logistics để nhận bản tin giá phân bón mỗi tuần!"}
+      ]
+    }
+  ]
+}
