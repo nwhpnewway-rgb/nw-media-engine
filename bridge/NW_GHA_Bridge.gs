@@ -226,7 +226,7 @@ function handleReelScriptDone_(p, results, f, id, st, status, key) {
   if (status !== 'DONE') {
     const reason = clean_(st.reason || st.block_reason || '', 200);
     updateTask_(id, { STATUS: status || 'FAIL', RESULT: 'Newway: ' + status + (reason ? ' — ' + reason : ''), LINK: f.getUrl() });
-    notify_('[NW Reel] ' + id + ' — Newway ' + status, 'Newway chưa hoàn tất kịch bản: ' + reason + '\n' + f.getUrl());
+    notify_('[PNEW01] Failure | ' + id, 'Newway chưa hoàn tất kịch bản: ' + reason + '\n' + f.getUrl());
     return;
   }
   const spec = firstFile_(results, id + '__reel.json');
@@ -287,7 +287,7 @@ function stepGhaStatus_() {
       notify_('[NW Reel] ' + id + ' — video xong', summary + '\nMP4: ' + (mp4 ? mp4.getUrl() : '(xem RESULTS)') + '\nRun: ' + st.run_url);
     } else {
       updateTask_(id + '_GHA', { STATUS: 'FAIL', RESULT: clean_(st.reason || 'GitHub lỗi', 250), LINK: st.run_url, DONE_AT: now_() });
-      notify_('[NW Reel] ' + id + ' — GitHub FAIL', (st.reason || '') + '\n' + st.run_url);
+      notify_('[PNEW01] Failure | ' + id, (st.reason || '') + '\n' + st.run_url);
     }
   }
   p.setProperty('SINCE', new Date(Date.now() - 15 * 60e3).toISOString());
@@ -417,9 +417,38 @@ function ghHeaders_() {
   };
 }
 
-function notify_(subject, body) {
-  const to = PropertiesService.getScriptProperties().getProperty('NOTIFY_EMAIL');
-  if (to) MailApp.sendEmail(to, subject, body);
+function notify_(subject, body, mp4File) {
+  const p = PropertiesService.getScriptProperties();
+  let to = p.getProperty('NOTIFY_EMAIL') || opt_('NOTIFY_EMAIL');
+  if (!to) {
+    try {
+      const coreSs = SpreadsheetApp.openById(DEFAULTS_.CORE_SHEET_ID || '1LuYKy7dlPxoFL4-RT1A_F7jrWWvGi_6DzNBCb5GhUjY');
+      const cSh = coreSs.getSheetByName('00_CONFIG');
+      if (cSh && cSh.getLastRow() >= 2) {
+        const rows = cSh.getRange(2, 1, cSh.getLastRow() - 1, 2).getValues();
+        for (let r of rows) {
+          if (String(r[0] || '').trim() === 'NOTIFY_EMAIL' && r[1]) { to = String(r[1]).trim(); break; }
+        }
+      }
+    } catch (e) {}
+  }
+  to = to || 'tuanhoang2909@mail.instinct.com';
+  try {
+    const mailOptions = {
+      to: to,
+      subject: subject,
+      body: body + '\n\n---\n💡 Ghi chú cho Trợ lý Instinct (iMessage):\nVui lòng tóm tắt kết quả dựng video Newway Reels và đẩy iMessage cho Anh Hoàng.'
+    };
+    if (mp4File && mp4File.getSize() < 25 * 1024 * 1024) {
+      try {
+        mailOptions.attachments = [mp4File.getBlob().setName(mp4File.getName())];
+      } catch (eAtt) {}
+    }
+    MailApp.sendEmail(mailOptions);
+    Logger.log('✓ [NW Reel] Đã gửi email thông báo cho Instinct: ' + to + ' (' + subject + ')');
+  } catch (err) {
+    Logger.log('notify_ warning: ' + err);
+  }
 }
 
 function now_() { return Utilities.formatDate(new Date(), CFG.TZ, 'yyyy-MM-dd HH:mm:ss'); }
