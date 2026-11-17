@@ -51,11 +51,16 @@
       background: rgba(255,107,26,.18); border: 1.5px solid rgba(255,107,26,.55); }
     .headline { font-weight: 900; font-size: 96px; line-height: 1.04; letter-spacing: -.02em; text-shadow: 0 6px 30px rgba(0,0,0,.55); }
     .headline.md { font-size: 78px; }
+    .headline:not(.md) { text-transform: uppercase; line-height: 1.2; }
+    .headline:not(.md) .hl { padding-top: .12em; }
     .hl { background: linear-gradient(90deg, var(--orange-bright) 0%, var(--orange) 45%, var(--amber) 100%);
       -webkit-background-clip: text; background-clip: text; color: transparent;
       -webkit-box-decoration-break: clone; box-decoration-break: clone; }
     .sub { font-weight: 600; font-size: 40px; line-height: 1.35; color: var(--ink-dim); text-shadow: 0 3px 16px rgba(0,0,0,.6); }
     .chips { display: flex; flex-wrap: wrap; gap: 18px; }
+    .chips .chip { font-size: 52px; padding: 22px 32px; gap: 18px; }
+    .chips .chip .trend { font-size: 40px; padding: 8px 18px; }
+    .h1line { white-space: nowrap; display: inline-block; }
     .chip { display: flex; align-items: center; gap: 14px; font-weight: 800; font-size: 40px; padding: 18px 28px; border-radius: 22px;
       background: var(--card); border: 1.5px solid var(--line); backdrop-filter: blur(10px); }
     .trend { font-family: var(--font-mono); font-weight: 700; font-size: 30px; padding: 6px 14px; border-radius: 12px; }
@@ -138,7 +143,6 @@
       <img src="assets/logo-dark.png" alt="NEWWAY" />
       <div class="header-right">
         <span class="pill"><span class="dot"></span><span id="handle">newwaylogisticsjsc</span></span>
-        <span class="pill counter" id="counter">SLIDE 01 / 08</span>
       </div>
     </div>
     <div id="slides"></div>
@@ -175,7 +179,7 @@
     const R_ = {
       hero: (s) => `
         <div class="kicker">${esc(s.kicker)}</div>
-        <div class="headline">${esc(s.headline)}<br><span class="hl">${esc(s.highlight)}</span></div>
+        <div class="headline"><span class="h1line">${esc(s.headline)}</span>${String(s.highlight || '').split(/(?<=,)\s+/).map((p) => `<br><span class="hl h1line">${esc(p)}</span>`).join('')}</div>
         ${s.sub ? `<div class="sub">${esc(s.sub)}</div>` : ''}
         <div class="chips">${(s.chips || []).map((c) => `<div class="chip">${esc(c.name)} ${trendBadge(c.trend, c.label)}</div>`).join('')}</div>`,
       bullets: (s) => `
@@ -203,7 +207,6 @@
       cta: (s) => `
         <div class="card">
           <img src="assets/logo-dark.png" alt="NEWWAY" />
-          <div class="handle">${esc(spec.handle || 'newwaylogisticsjsc')}</div>
           <div class="tag">${esc(s.tagline || '')}</div>
           <div class="follow" id="follow">Follow +</div>
           ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
@@ -251,6 +254,17 @@
       }
     }
 
+    // fit hero title line 1 on ONE row: shrink font only if wider than the slide
+    function fitTitle() {
+      document.querySelectorAll('.h1line').forEach((e) => {
+        e.style.fontSize = '';
+        const avail = e.parentElement.clientWidth, w = e.scrollWidth;
+        if (w > avail) e.style.fontSize = (96 * avail / w * 0.99).toFixed(2) + 'px';
+      });
+    }
+    fitTitle();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
+
     function slideIndexAt(t) {
       let idx = 0;
       T.slides.forEach((s, i) => { if (t >= s.start_s) idx = i; });
@@ -259,7 +273,6 @@
 
     function sync(t) {
       const i = slideIndexAt(t);
-      counter.textContent = `SLIDE ${String(i + 1).padStart(2, '0')} / ${String(N).padStart(2, '0')}`;
       prog.style.width = (Math.min(1, t / TOTAL) * 100).toFixed(2) + '%';
       karaokeAt(t);
       const s = T.slides[i], el = slideEls[i];
