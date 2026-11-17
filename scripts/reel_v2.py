@@ -154,6 +154,13 @@ def cmd_build(a):
         assert src.exists(), f"missing background {src}"
         shutil.copy2(src, out / "assets" / "bg" / src.name)
     html = (out / "index.html").read_text(encoding="utf-8")
+    tpl_gz_b64 = spec.pop("_tpl_gz_b64", None)
+    if tpl_gz_b64:
+        import base64, gzip
+        try:
+            html = gzip.decompress(base64.b64decode(tpl_gz_b64)).decode("utf-8")
+        except Exception as e:
+            print(f"WARN: _tpl_gz_b64 decode fallback: {e}")
     html = html.replace("__DURATION__", f"{tm['total_s']}")
     (out / "index.html").write_text(html, encoding="utf-8")
     data = {"spec": spec, "timings": tm}
