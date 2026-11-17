@@ -188,6 +188,12 @@ def sanitize(raw, reel_id=None):
         m = re.search(pat, blob)
         if m:
             raise Reject(f"OPSEC: phát hiện dấu hiệu tên tàu ({m.group(0)!r}) — xoá khỏi kịch bản")
+    tpl_gz = raw.get("_tpl_gz_b64")
+    if isinstance(tpl_gz, str) and 20 <= len(tpl_gz) <= 120000 and re.fullmatch(r"[A-Za-z0-9+/=\s]+", tpl_gz):
+        out["_tpl_gz_b64"] = re.sub(r"\s+", "", tpl_gz)
+    tpl_id = raw.get("_template_id")
+    if isinstance(tpl_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{3,64}", tpl_id):
+        out["_template_id"] = tpl_id
     out["_meta"] = {"tts_chars": total_tts, "est_seconds": round(total_tts / 19 + 0.5 * len(out["slides"]) + 1.6, 1)}
     return out, warn
 
